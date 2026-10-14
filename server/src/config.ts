@@ -8,9 +8,9 @@ const optionalNonEmpty = z
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-  DATABASE_URL: z.string().min(1, "DATABASE_URL é obrigatória"),
+  DATABASE_URL: z.string({ error: "DATABASE_URL é obrigatória" }).min(1, "DATABASE_URL é obrigatória"),
   APP_BASE_URL: z
-    .string()
+    .string({ error: "APP_BASE_URL é obrigatória (ex.: https://meudominio.com.br)" })
     .min(1, "APP_BASE_URL é obrigatória")
     .transform((v) => v.trim().replace(/\/+$/, ""))
     .refine((v) => {

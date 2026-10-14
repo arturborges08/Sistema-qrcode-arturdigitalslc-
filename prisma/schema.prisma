@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" para desenvolvimento; debian-openssl-3.0.x cobre a imagem Linux usada na hospedagem.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

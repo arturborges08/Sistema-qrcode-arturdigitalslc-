@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body { @apply bg-stone-100 text-zinc-900 antialiased; }
+
+:focus-visible { @apply outline-2 outline-offset-2 outline-zinc-900; }
+
+@media print {
+  body { background: #fff; }
+}

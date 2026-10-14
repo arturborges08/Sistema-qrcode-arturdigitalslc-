@@ -11,12 +11,14 @@ const STATUS = [
   { v: "all", label: "Todos" },
   { v: "active", label: "Ativos" },
   { v: "inactive", label: "Inativos" },
+  { v: "unconfigured", label: "Em branco" },
 ] as const;
 
 export function PlatesListPage() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const status = params.get("status") ?? "all";
+  const lote = params.get("lote") ?? "";
   const page = Math.max(1, Number(params.get("page") ?? 1) || 1);
   const [term, setTerm] = useState(q);
 
@@ -25,8 +27,9 @@ export function PlatesListPage() {
   const { data, error, loading, reload } = useAsync(() => {
     const sp = new URLSearchParams({ status, page: String(page), pageSize: "20" });
     if (q) sp.set("q", q);
+    if (lote) sp.set("batch", lote);
     return api<PlateList>(`/plates?${sp}`);
-  }, [q, status, page]);
+  }, [q, status, page, lote]);
 
   function update(next: Record<string, string>) {
     const sp = new URLSearchParams(params);
@@ -43,7 +46,19 @@ export function PlatesListPage() {
     <>
       <PageHeader
         title="Plaquinhas"
-        description={data ? `${data.total} ${data.total === 1 ? "registro" : "registros"}` : undefined}
+        description={
+          data ? (
+            <>
+              {data.total} {data.total === 1 ? "registro" : "registros"}
+              {lote && (
+                <>
+                  {" "}· lote <strong className="font-medium text-zinc-700">{lote}</strong>{" "}
+                  <button className="underline underline-offset-2" onClick={() => update({ lote: "", page: "1" })}>limpar</button>
+                </>
+              )}
+            </>
+          ) : undefined
+        }
         actions={
           <Link to="/plaquinhas/nova" className={buttonClass("primary")}>
             <Plus className="size-4" aria-hidden />
@@ -74,7 +89,7 @@ export function PlatesListPage() {
               onChange={(e) => setTerm(e.target.value)}
             />
           </form>
-          <div className="flex rounded-lg border border-zinc-300 p-0.5" role="group" aria-label="Filtrar por status">
+          <div className="flex flex-wrap rounded-lg border border-zinc-300 p-0.5" role="group" aria-label="Filtrar por status">
             {STATUS.map((s) => (
               <button
                 key={s.v}
@@ -97,7 +112,7 @@ export function PlatesListPage() {
             <ErrorBox message={error} onRetry={reload} />
           </div>
         ) : data && data.items.length === 0 ? (
-          q || status !== "all" ? (
+          q || status !== "all" || lote ? (
             <EmptyState icon={<Search className="size-5" />} title="Nada encontrado" description="Nenhuma plaquinha corresponde aos filtros." />
           ) : (
             <EmptyState

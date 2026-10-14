@@ -7,6 +7,7 @@ import fs from "node:fs";
 import { chromium } from "playwright-core";
 import { PNG } from "pngjs";
 import jsQR from "jsqr";
+import { writeQrVideo } from "./fake-camera.mjs";
 
 const APP_PORT = 3100;
 const DEST_PORT = 4501;
@@ -208,6 +209,84 @@ try {
   await m.goto(`${BASE}/plaquinhas`);
   await m.getByText("Loja Mobile").first().waitFor();
   await m.screenshot({ path: `${SHOTS}/12-mobile-lista.png`, fullPage: true });
+
+  // ---------- Lote em branco + escanear para configurar ----------
+  await page.goto(`${BASE}/lotes/novo`);
+  await page.fill("#quantity", "12");
+  const BATCH = `Lote E2E ${Date.now()}`;
+  await page.fill("#batchName", BATCH);
+  await page.getByRole("button", { name: "Gerar QR Codes" }).click();
+  await page.waitForURL(/\/lotes\/imprimir\?nome=/);
+  const sheet = page.getByTestId("batch-grid").locator("img");
+  await sheet.first().waitFor();
+  check("folha do lote mostra 12 QR Codes", (await sheet.count()) === 12);
+  await page.screenshot({ path: `${SHOTS}/13-folha-lote.png`, fullPage: true });
+  const batchItems = await page.evaluate(async (b) => (await (await fetch(`/api/plates/batch-qr?batch=${encodeURIComponent(b)}`)).json()).items, BATCH);
+  const blank = batchItems[3];
+  const blankCodes = new Set(batchItems.map((i) => i.code));
+  check("todos os QR Codes do lote são diferentes", blankCodes.size === 12);
+
+  const anon = await visitor.newPage();
+  const anonRes = await anon.goto(blank.permanentUrl);
+  check("visitante que escaneia plaquinha em branco vê 'ainda não ativada'", anonRes.status() === 404 && (await anon.content()).includes("ainda não ativada"));
+  await anon.screenshot({ path: `${SHOTS}/14-em-branco-visitante.png` });
+
+  // Admin logado escaneia com a câmera do celular (abre a URL) → cai na tela de configuração
+  await page.goto(blank.permanentUrl);
+  await page.waitForURL(/configurar=1/);
+  await page.getByText("Plaquinha lida. Defina o link").waitFor();
+  check("admin que escaneia plaquinha em branco cai na tela de configurar", true);
+  await page.screenshot({ path: `${SHOTS}/15-configurar.png`, fullPage: true });
+  await page.fill("#c-destinationUrl", `http://127.0.0.1:${DEST_PORT}/cliente-novo`);
+  await page.fill("#c-businessName", "Pizzaria Bella");
+  await page.getByRole("button", { name: "Salvar e ativar" }).click();
+  await page.getByText("Plaquinha configurada").waitFor();
+  await anon.goto(blank.permanentUrl);
+  check("depois de configurar, o mesmo QR leva ao link", (await anon.locator("h1").innerText()) === "DESTINO /cliente-novo");
+
+  // Leitor de QR dentro do painel com câmera simulada mostrando outra plaquinha do lote
+  const target = batchItems[7];
+  const y4m = `${SHOTS}/camera.y4m`;
+  await writeQrVideo(target.permanentUrl, y4m);
+  const camBrowser = await chromium.launch({
+    executablePath: process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium",
+    args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${y4m}`],
+  });
+  try {
+    const camCtx = await camBrowser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, permissions: ["camera"] });
+    await camCtx.addCookies(await ctx.cookies());
+    const cam = await camCtx.newPage();
+    cam.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text()));
+    await cam.goto(`${BASE}/escanear`);
+    await cam.getByRole("button", { name: "Abrir câmera" }).click();
+    await cam.waitForURL(new RegExp(`/plaquinhas/${target.id}\\?configurar=1`), { timeout: 15000 });
+    check("leitor da câmera no painel reconhece o QR e abre a plaquinha certa", true);
+    check("tela de configurar sem rolagem horizontal no celular", !(await cam.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)));
+    await cam.screenshot({ path: `${SHOTS}/16-mobile-configurar-pela-camera.png`, fullPage: true });
+  } catch (e) {
+    check("leitor da câmera no painel reconhece o QR e abre a plaquinha certa", false, e.message);
+  } finally {
+    await camBrowser.close();
+  }
+
+  // Digitar o código manualmente
+  await page.goto(`${BASE}/escanear`);
+  await page.fill("#code", batchItems[5].code);
+  await page.getByRole("button", { name: "Abrir", exact: true }).click();
+  await page.waitForURL(new RegExp(`/plaquinhas/${batchItems[5].id}`));
+  check("abrir plaquinha digitando o código", true);
+
+  // Sessão expirada: link "sou o administrador" leva ao login e volta para a plaquinha
+  const fresh = await browser.newContext();
+  const fp = await fresh.newPage();
+  await fp.goto(batchItems[9].permanentUrl);
+  await fp.getByText("Sou o administrador").click();
+  await fp.fill("#email", ADMIN.email);
+  await fp.fill("#password", ADMIN.password);
+  await fp.click("button[type=submit]");
+  await fp.waitForURL(new RegExp(`/plaquinhas/${batchItems[9].id}\\?configurar=1`));
+  check("admin sem sessão: entra e volta para a plaquinha escaneada", true);
+  await fresh.close();
 
   // Logout
   await page.getByRole("button", { name: "Sair" }).click();

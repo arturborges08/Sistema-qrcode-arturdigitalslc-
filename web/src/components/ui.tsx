@@ -118,6 +118,15 @@ export function StatusBadge({ active }: { active: boolean }) {
   );
 }
 
+export function PendingBadge() {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-amber-600/20">
+      <span className="size-1.5 rounded-full bg-amber-500" aria-hidden />
+      Em branco
+    </span>
+  );
+}
+
 export function Spinner({ label = "Carregando…" }: { label?: string }) {
   return (
     <div className="flex items-center justify-center gap-2 py-16 text-sm text-zinc-500" role="status">

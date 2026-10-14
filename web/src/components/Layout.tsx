@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Link } from "react-router-dom";
-import { LayoutDashboard, LogOut, QrCode, Plus } from "lucide-react";
+import { Layers, LayoutDashboard, LogOut, QrCode, Plus, ScanLine } from "lucide-react";
 import { useAuth } from "../auth";
 import { buttonClass, cx } from "./ui";
 import { useToast } from "./Toast";
@@ -7,6 +7,8 @@ import { useToast } from "./Toast";
 const nav = [
   { to: "/", label: "Visão geral", icon: LayoutDashboard, end: true },
   { to: "/plaquinhas", label: "Plaquinhas", icon: QrCode, end: false },
+  { to: "/lotes", label: "Lotes", icon: Layers, end: false },
+  { to: "/escanear", label: "Escanear", icon: ScanLine, end: false },
 ];
 
 export function Layout() {
@@ -48,22 +50,24 @@ export function Layout() {
                 }
               >
                 <n.icon className="size-4" aria-hidden />
-                <span className="hidden sm:inline">{n.label}</span>
-                <span className="sr-only sm:hidden">{n.label}</span>
+                <span className="hidden md:inline">{n.label}</span>
+                <span className="sr-only md:hidden">{n.label}</span>
               </NavLink>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <Link to="/plaquinhas/nova" className={cx(buttonClass("primary", "sm"), "hidden sm:inline-flex")}>
-              <Plus className="size-4" aria-hidden />
-              Nova plaquinha
-            </Link>
+            <div className="hidden lg:block">
+              <Link to="/plaquinhas/nova" className={buttonClass("primary", "sm")}>
+                <Plus className="size-4" aria-hidden />
+                Nova plaquinha
+              </Link>
+            </div>
             <span className="hidden max-w-48 truncate text-sm text-zinc-500 lg:inline" title={email ?? ""}>
               {email}
             </span>
             <button onClick={onLogout} className={buttonClass("ghost", "sm")} aria-label="Sair">
               <LogOut className="size-4" aria-hidden />
-              <span className="hidden sm:inline">Sair</span>
+              <span className="hidden md:inline">Sair</span>
             </button>
           </div>
         </div>

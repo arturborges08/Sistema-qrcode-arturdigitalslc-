@@ -2,6 +2,15 @@
 
 Cada plaquinha recebe um endereço permanente (`https://seudominio.com.br/r/AbC23xYz`). O QR Code e a tag NFC gravam esse endereço. No painel você troca o destino (avaliação do Google, WhatsApp, Instagram…) e a mesma plaquinha física passa a abrir o novo link, sem reimprimir.
 
+## Fluxo com lotes em branco
+
+1. **Lotes → Gerar lote**: escolha a quantidade (até 200). Cada plaquinha recebe um QR Code único, ainda sem link.
+2. Na folha do lote, **Imprimir / salvar PDF** e mande para a gráfica. O código de 8 caracteres embaixo de cada QR é opcional.
+3. Na instalação, com o painel aberto no celular: escaneie a plaquinha com a câmera do celular **ou** use **Escanear** dentro do painel. Plaquinha em branco abre direto a tela “Defina o link”.
+4. Cole o link, informe o cliente e **Salvar e ativar**. Para trocar depois, escaneie pelo **Escanear** do painel (a câmera comum abre o link do cliente).
+
+Visitantes que escanearem uma plaquinha em branco veem “Plaquinha ainda não ativada”, sem nenhum dado interno.
+
 ## Arquitetura
 
 Um único serviço Node.js:

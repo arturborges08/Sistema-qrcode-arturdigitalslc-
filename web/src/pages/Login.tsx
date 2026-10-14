@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { QrCode } from "lucide-react";
 import { useAuth } from "../auth";
 import { Button, Field, Input } from "../components/ui";
@@ -7,11 +7,19 @@ import { Button, Field, Input } from "../components/ui";
 export function LoginPage() {
   const { status, login } = useAuth();
   const location = useLocation();
+  const [params] = useSearchParams();
+  // Volta para a plaquinha escaneada depois do login. Só caminhos internos /r/CODIGO são aceitos.
+  const voltar = params.get("voltar");
+  const backToScan = voltar && /^\/r\/[A-Za-z0-9]{4,32}$/.test(voltar) ? voltar : null;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  if (status === "authenticated" && backToScan) {
+    window.location.replace(backToScan);
+    return null;
+  }
   if (status === "authenticated") {
     const from = (location.state as { from?: string } | null)?.from ?? "/";
     return <Navigate to={from} replace />;

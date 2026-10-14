@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Download, ExternalLink, History, Printer, Trash2 } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { checkUrl, formatDateTime } from "../lib/format";
 import type { HistoryItem, Plate } from "../lib/types";
 import { useAsync } from "../lib/useAsync";
-import { Button, buttonClass, Card, CardHeader, ErrorBox, Field, Input, PageHeader, Spinner, StatusBadge, Switch, Textarea } from "../components/ui";
+import { Button, buttonClass, Card, CardHeader, ErrorBox, Field, Input, PageHeader, PendingBadge, Spinner, StatusBadge, Switch, Textarea } from "../components/ui";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CopyButton } from "../components/CopyButton";
 import { useToast } from "../components/Toast";
@@ -39,8 +39,8 @@ export function PlateDetailPage() {
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-3">
-            <span className="break-words">{plate.businessName}</span>
-            <StatusBadge active={plate.active} />
+            <span className="break-words">{plate.businessName ?? "Plaquinha não atribuída"}</span>
+            {plate.configured ? <StatusBadge active={plate.active} /> : <PendingBadge />}
           </span>
         }
         description={
@@ -51,12 +51,20 @@ export function PlateDetailPage() {
       />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-6">
+          {!plate.configured && <ConfigureCard plate={plate} onSaved={onSaved} />}
           <PermanentCard plate={plate} />
-          <div className="lg:hidden">
-            <QrCard plate={plate} />
-          </div>
-          <DestinationCard plate={plate} onSaved={onSaved} />
-          <DetailsCard plate={plate} onSaved={onSaved} />
+          {plate.configured && (
+            <div className="lg:hidden">
+              <QrCard plate={plate} />
+            </div>
+          )}
+          {plate.configured && <DestinationCard plate={plate} onSaved={onSaved} />}
+          {plate.configured && <DetailsCard plate={plate} onSaved={onSaved} />}
+          {!plate.configured && (
+            <div className="lg:hidden">
+              <QrCard plate={plate} />
+            </div>
+          )}
           <HistoryCard loading={history.loading} error={history.error} items={history.data?.items ?? []} />
           <DangerCard plate={plate} />
         </div>
@@ -65,6 +73,77 @@ export function PlateDetailPage() {
         </div>
       </div>
     </>
+  );
+}
+
+function ConfigureCard({ plate, onSaved }: { plate: Plate; onSaved: (p: Plate) => void }) {
+  const toast = useToast();
+  const [params] = useSearchParams();
+  const fromScan = params.get("configurar") === "1";
+  const [form, setForm] = useState({ businessName: plate.businessName ?? "", internalName: plate.internalName, destinationUrl: "" });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    const errs: Record<string, string> = {};
+    if (!form.businessName.trim()) errs.businessName = "Informe o nome do cliente ou estabelecimento";
+    if (!form.internalName.trim()) errs.internalName = "Informe o nome interno";
+    const urlErr = checkUrl(form.destinationUrl);
+    if (urlErr) errs.destinationUrl = urlErr;
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
+    setSaving(true);
+    try {
+      const updated = await api<Plate>(`/plates/${plate.id}`, {
+        method: "PATCH",
+        body: { businessName: form.businessName, internalName: form.internalName, destinationUrl: form.destinationUrl.trim() },
+      });
+      onSaved(updated);
+      toast("success", "Plaquinha configurada. O QR Code já leva ao link.");
+    } catch (err) {
+      if (err instanceof ApiError && err.fields?.length) setErrors(Object.fromEntries(err.fields.map((f) => [f.path, f.message])));
+      else toast("error", (err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="border-amber-300 ring-4 ring-amber-100">
+      <CardHeader
+        title={fromScan ? "Plaquinha lida. Defina o link" : "Configurar plaquinha"}
+        description="Esta plaquinha está em branco: quem escanear verá “ainda não ativada” até você salvar um link."
+      />
+      <form onSubmit={onSubmit} className="space-y-5 p-5" noValidate>
+        <Field label="Link de destino" htmlFor="c-destinationUrl" error={errors.destinationUrl} hint="Avaliação do Google, WhatsApp, Instagram… Cole o link completo.">
+          <Input
+            id="c-destinationUrl"
+            type="url"
+            inputMode="url"
+            placeholder="https://"
+            maxLength={2048}
+            autoFocus={fromScan}
+            value={form.destinationUrl}
+            invalid={!!errors.destinationUrl}
+            onChange={(e) => setForm({ ...form, destinationUrl: e.target.value })}
+          />
+        </Field>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Cliente / estabelecimento" htmlFor="c-businessName" error={errors.businessName}>
+            <Input id="c-businessName" maxLength={120} value={form.businessName} invalid={!!errors.businessName} onChange={(e) => setForm({ ...form, businessName: e.target.value })} />
+          </Field>
+          <Field label="Nome interno" htmlFor="c-internalName" error={errors.internalName} hint="Ex.: Balcão, Mesa 3">
+            <Input id="c-internalName" maxLength={120} value={form.internalName} invalid={!!errors.internalName} onChange={(e) => setForm({ ...form, internalName: e.target.value })} />
+          </Field>
+        </div>
+        <div className="flex justify-end">
+          <Button type="submit" variant="primary" loading={saving}>
+            Salvar e ativar
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 
@@ -121,7 +200,7 @@ function DestinationCard({ plate, onSaved }: { plate: Plate; onSaved: (p: Plate)
       <CardHeader title="Destino atual" description="Para onde o visitante é enviado ao ler o QR Code ou aproximar o celular." />
       <div className="space-y-5 p-5">
         <a
-          href={plate.destinationUrl}
+          href={plate.destinationUrl ?? undefined}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-start gap-2 break-all text-sm font-medium text-zinc-900 underline decoration-zinc-300 underline-offset-4 hover:decoration-zinc-900"
@@ -173,11 +252,11 @@ function DestinationCard({ plate, onSaved }: { plate: Plate; onSaved: (p: Plate)
 
 function DetailsCard({ plate, onSaved }: { plate: Plate; onSaved: (p: Plate) => void }) {
   const toast = useToast();
-  const [form, setForm] = useState({ businessName: plate.businessName, internalName: plate.internalName, notes: plate.notes ?? "" });
+  const [form, setForm] = useState({ businessName: plate.businessName ?? "", internalName: plate.internalName, notes: plate.notes ?? "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [toggling, setToggling] = useState(false);
-  const dirty = form.businessName !== plate.businessName || form.internalName !== plate.internalName || form.notes !== (plate.notes ?? "");
+  const dirty = form.businessName !== (plate.businessName ?? "") || form.internalName !== plate.internalName || form.notes !== (plate.notes ?? "");
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -193,7 +272,7 @@ function DetailsCard({ plate, onSaved }: { plate: Plate; onSaved: (p: Plate) => 
         body: { businessName: form.businessName, internalName: form.internalName, notes: form.notes.trim() || null },
       });
       onSaved(updated);
-      setForm({ businessName: updated.businessName, internalName: updated.internalName, notes: updated.notes ?? "" });
+      setForm({ businessName: updated.businessName ?? "", internalName: updated.internalName, notes: updated.notes ?? "" });
       toast("success", "Dados salvos.");
     } catch (err) {
       if (err instanceof ApiError && err.fields?.length) setErrors(Object.fromEntries(err.fields.map((f) => [f.path, f.message])));
@@ -252,7 +331,7 @@ function QrCard({ plate }: { plate: Plate }) {
   const base = `/api/plates/${plate.id}`;
   return (
     <Card>
-      <CardHeader title="QR Code" description={`${plate.businessName} · ${plate.internalName}`} />
+      <CardHeader title="QR Code" description={`${plate.businessName ?? "Não atribuída"} · ${plate.internalName}`} />
       <div className="space-y-4 p-5">
         <div className="mx-auto max-w-64 rounded-lg border border-zinc-200 bg-white p-2">
           <img src={`${base}/qr.svg`} alt={`QR Code do endereço ${plate.permanentUrl}`} className="aspect-square w-full" width={256} height={256} />
@@ -358,7 +437,7 @@ function DangerCard({ plate }: { plate: Plate }) {
         onClose={() => setOpen(false)}
       >
         <p>
-          <strong className="text-zinc-900">{plate.businessName}</strong> · {plate.internalName}
+          <strong className="text-zinc-900">{plate.businessName ?? "Não atribuída"}</strong> · {plate.internalName}
         </p>
         <p>
           Qualquer plaquinha física com o código <span className="font-mono">{plate.code}</span> deixará de funcionar e passará a mostrar “Link não

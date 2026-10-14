@@ -24,7 +24,7 @@ export function PrintQrPage() {
             <ArrowLeft className="size-4" aria-hidden /> Voltar
           </Link>
           <div className="min-w-0 flex-1 text-sm">
-            <p className="truncate font-medium">{plate.businessName} · {plate.internalName}</p>
+            <p className="truncate font-medium">{plate.businessName ?? "Não atribuída"} · {plate.internalName}</p>
             <p className="truncate font-mono text-xs text-zinc-500">{plate.permanentUrl}</p>
           </div>
           <label htmlFor="tam" className="text-sm text-zinc-600">Tamanho</label>

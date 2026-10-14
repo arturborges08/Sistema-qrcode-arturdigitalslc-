@@ -49,10 +49,24 @@ const IdParam = z.object({ id: z.uuid("Identificador inválido") });
 
 const ListQuery = z.object({
   q: z.string().trim().max(120).optional(),
-  status: z.enum(["all", "active", "inactive"]).default("all"),
+  status: z.enum(["all", "active", "inactive", "unconfigured"]).default("all"),
+  batch: z.string().trim().min(1).max(80).optional(),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  pageSize: z.coerce.number().int().min(1).max(200).default(20),
 });
+
+export const MAX_BATCH = 200;
+
+const BatchSchema = z.object({
+  quantity: z.coerce
+    .number({ error: "Informe a quantidade" })
+    .int("A quantidade deve ser um número inteiro")
+    .min(1, "A quantidade mínima é 1")
+    .max(MAX_BATCH, `A quantidade máxima por lote é ${MAX_BATCH}`),
+  batchName: z.string().trim().max(80, "O nome do lote deve ter no máximo 80 caracteres").optional(),
+});
+
+const CodeParam = z.object({ code: z.string().regex(/^[A-Za-z0-9]{4,32}$/, "Código inválido") });
 
 export function toDto(p: Plate) {
   return {
@@ -62,6 +76,8 @@ export function toDto(p: Plate) {
     businessName: p.businessName,
     internalName: p.internalName,
     destinationUrl: p.destinationUrl,
+    configured: p.destinationUrl !== null,
+    batchName: p.batchName,
     active: p.active,
     notes: p.notes,
     createdAt: p.createdAt.toISOString(),
@@ -77,12 +93,14 @@ async function getPlateOr404(id: string) {
 
 platesRouter.get("/stats", async (_req, res, next) => {
   try {
-    const [total, active, recent] = await Promise.all([
+    // Ativo = redirecionando de fato; em branco = ativa mas sem link; inativo = desativada. Os três somam o total.
+    const [total, active, inactive, recent] = await Promise.all([
       prisma.plate.count(),
-      prisma.plate.count({ where: { active: true } }),
+      prisma.plate.count({ where: { active: true, destinationUrl: { not: null } } }),
+      prisma.plate.count({ where: { active: false } }),
       prisma.plate.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
     ]);
-    res.json({ total, active, inactive: total - active, recent: recent.map(toDto) });
+    res.json({ total, active, inactive, unconfigured: total - active - inactive, recent: recent.map(toDto) });
   } catch (e) {
     next(e);
   }
@@ -90,9 +108,12 @@ platesRouter.get("/stats", async (_req, res, next) => {
 
 platesRouter.get("/", async (req, res, next) => {
   try {
-    const { q, status, page, pageSize } = ListQuery.parse(req.query);
+    const { q, status, batch, page, pageSize } = ListQuery.parse(req.query);
     const where: Prisma.PlateWhereInput = {};
-    if (status !== "all") where.active = status === "active";
+    if (status === "active") Object.assign(where, { active: true, destinationUrl: { not: null } });
+    if (status === "inactive") where.active = false;
+    if (status === "unconfigured") Object.assign(where, { active: true, destinationUrl: null });
+    if (batch) where.batchName = batch;
     if (q) {
       where.OR = [
         { businessName: { contains: q, mode: "insensitive" } },
@@ -119,7 +140,7 @@ platesRouter.post("/", async (req, res, next) => {
         const plate = await prisma.$transaction(async (tx) => {
           const created = await tx.plate.create({ data: { ...data, code: generateCode() } });
           await tx.destinationChange.create({
-            data: { plateId: created.id, previousUrl: null, newUrl: created.destinationUrl },
+            data: { plateId: created.id, previousUrl: null, newUrl: data.destinationUrl },
           });
           return created;
         });
@@ -134,6 +155,96 @@ platesRouter.post("/", async (req, res, next) => {
       }
     }
     throw new Error("Não foi possível gerar um identificador único");
+  } catch (e) {
+    next(e);
+  }
+});
+
+platesRouter.post("/batch", async (req, res, next) => {
+  try {
+    const { quantity, batchName: rawName } = BatchSchema.parse(req.body ?? {});
+    const stamp = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" }).format(new Date());
+    const batchName = rawName || `Lote ${stamp}`;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const items = await prisma.$transaction(async (tx) => {
+          const used = await tx.plate.count({ where: { batchName } });
+          const data = Array.from({ length: quantity }, (_, i) => ({
+            code: generateCode(),
+            internalName: `${batchName} · ${String(used + i + 1).padStart(3, "0")}`,
+            batchName,
+          }));
+          await tx.plate.createMany({ data });
+          return tx.plate.findMany({ where: { code: { in: data.map((d) => d.code) } }, orderBy: { internalName: "asc" } });
+        });
+        res.status(201).json({ batchName, items: items.map(toDto) });
+        return;
+      } catch (e) {
+        const collision = e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+        if (!collision) throw e;
+      }
+    }
+    throw new Error("Não foi possível gerar identificadores únicos");
+  } catch (e) {
+    next(e);
+  }
+});
+
+platesRouter.get("/batches", async (_req, res, next) => {
+  try {
+    const rows = await prisma.plate.groupBy({
+      by: ["batchName"],
+      where: { batchName: { not: null } },
+      _count: { _all: true },
+      _min: { createdAt: true },
+    });
+    const pending = await prisma.plate.groupBy({
+      by: ["batchName"],
+      where: { batchName: { not: null }, destinationUrl: null },
+      _count: { _all: true },
+    });
+    const pendingMap = new Map(pending.map((p) => [p.batchName, p._count._all]));
+    res.json({
+      items: rows
+        .map((r) => ({
+          batchName: r.batchName!,
+          total: r._count._all,
+          unconfigured: pendingMap.get(r.batchName) ?? 0,
+          createdAt: r._min.createdAt!.toISOString(),
+        }))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// QR Codes de um lote inteiro de uma vez (para a folha de impressão), como data URIs SVG.
+platesRouter.get("/batch-qr", async (req, res, next) => {
+  try {
+    const { batch } = z.object({ batch: z.string().trim().min(1).max(80) }).parse(req.query);
+    const plates = await prisma.plate.findMany({ where: { batchName: batch }, orderBy: { internalName: "asc" }, take: 1000 });
+    const items = await Promise.all(
+      plates.map(async (p) => ({
+        id: p.id,
+        code: p.code,
+        internalName: p.internalName,
+        permanentUrl: permanentUrl(p.code),
+        svgDataUri: `data:image/svg+xml;base64,${Buffer.from(await qrSvg(permanentUrl(p.code))).toString("base64")}`,
+      })),
+    );
+    res.json({ batchName: batch, items });
+  } catch (e) {
+    next(e);
+  }
+});
+
+platesRouter.get("/by-code/:code", async (req, res, next) => {
+  try {
+    const { code } = CodeParam.parse(req.params);
+    const plate = await prisma.plate.findUnique({ where: { code } });
+    if (!plate) throw notFound("Nenhuma plaquinha com esse código");
+    res.json(toDto(plate));
   } catch (e) {
     next(e);
   }
@@ -154,7 +265,7 @@ platesRouter.patch("/:id", async (req, res, next) => {
     const data = UpdateSchema.parse(req.body ?? {});
     const updated = await prisma.$transaction(async (tx) => {
       // FOR UPDATE evita perder um registro de histórico em edições simultâneas.
-      const rows = await tx.$queryRaw<{ destination_url: string }[]>`
+      const rows = await tx.$queryRaw<{ destination_url: string | null }[]>`
         SELECT destination_url FROM plates WHERE id = ${id}::uuid FOR UPDATE`;
       if (rows.length === 0) throw notFound("Plaquinha não encontrada");
       const previousUrl = rows[0].destination_url;
@@ -200,7 +311,7 @@ platesRouter.get("/:id/history", async (req, res, next) => {
 });
 
 function fileBase(p: Plate) {
-  const slug = p.businessName
+  const slug = (p.businessName ?? p.batchName ?? "plaquinha")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()

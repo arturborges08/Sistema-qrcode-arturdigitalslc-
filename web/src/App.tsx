@@ -10,6 +10,10 @@ import { PlateNewPage } from "./pages/PlateNew";
 import { PlateDetailPage } from "./pages/PlateDetail";
 import { PrintQrPage } from "./pages/PrintQr";
 import { NotFoundPage } from "./pages/NotFound";
+import { BatchesPage } from "./pages/Batches";
+import { BatchNewPage } from "./pages/BatchNew";
+import { BatchPrintPage } from "./pages/BatchPrint";
+import { ScanPage } from "./pages/Scan";
 
 function RequireAuth() {
   const { status } = useAuth();
@@ -25,6 +29,7 @@ const router = createBrowserRouter([
     element: <RequireAuth />,
     children: [
       { path: "/plaquinhas/:id/imprimir", element: <PrintQrPage /> },
+      { path: "/lotes/imprimir", element: <BatchPrintPage /> },
       {
         element: <Layout />,
         children: [
@@ -32,6 +37,9 @@ const router = createBrowserRouter([
           { path: "/plaquinhas", element: <PlatesListPage /> },
           { path: "/plaquinhas/nova", element: <PlateNewPage /> },
           { path: "/plaquinhas/:id", element: <PlateDetailPage /> },
+          { path: "/lotes", element: <BatchesPage /> },
+          { path: "/lotes/novo", element: <BatchNewPage /> },
+          { path: "/escanear", element: <ScanPage /> },
           { path: "*", element: <NotFoundPage /> },
         ],
       },

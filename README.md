@@ -79,7 +79,7 @@ npm run build && CHROMIUM_PATH=/caminho/do/chromium npm run test:e2e
 
 ## Implantação no Railway
 
-O repositório já traz `Dockerfile` e `railway.json`. A cada deploy o Railway constrói a imagem, roda `npm run db:migrate` (`prisma migrate deploy`) **antes** de liberar a nova versão e só troca o tráfego quando `/health` responde `200`. Se a migration falhar, a versão anterior continua no ar.
+O repositório já traz `Dockerfile` e `railway.json`. A cada deploy o Railway constrói a imagem pelo `Dockerfile`. Ao iniciar, o container roda `prisma migrate deploy` (aplica só migrations pendentes; seguro de repetir) e então sobe o servidor. Se a migration falhar, o servidor não sobe e o Railway não troca o tráfego, porque `/health` não responde.
 
 ### 1. Banco de dados
 

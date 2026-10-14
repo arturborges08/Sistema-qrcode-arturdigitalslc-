@@ -23,4 +23,5 @@ COPY --from=build --chown=node:node /app/prisma ./prisma
 COPY --from=build --chown=node:node /app/dist ./dist
 USER node
 EXPOSE 3000
-CMD ["node", "dist/server/index.js"]
+# Aplica migrations pendentes antes de subir (idempotente; o Prisma usa trava no banco).
+CMD ["sh", "-c", "npx --no-install prisma migrate deploy && exec node dist/server/index.js"]

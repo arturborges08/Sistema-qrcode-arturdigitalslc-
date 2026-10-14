@@ -1,0 +1,42 @@
+import { timingSafeEqual } from "node:crypto";
+import type { NextFunction, Request, Response } from "express";
+import { forbidden, unauthorized } from "../lib/errors.js";
+import { findSession, sessionCookieName } from "../lib/session.js";
+
+export interface AuthContext {
+  sessionId: string;
+  adminId: string;
+  email: string;
+  csrfToken: string;
+}
+
+declare module "express-serve-static-core" {
+  interface Request {
+    auth?: AuthContext;
+  }
+}
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function safeEqual(a: string, b: string) {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+/** Exige sessão válida e, para métodos que alteram dados, o token CSRF no cabeçalho X-CSRF-Token. */
+export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
+  try {
+    const token = req.cookies?.[sessionCookieName()] as string | undefined;
+    const s = await findSession(token);
+    if (!s) throw unauthorized();
+    if (!SAFE_METHODS.has(req.method)) {
+      const header = req.get("x-csrf-token");
+      if (!header || !safeEqual(header, s.csrfToken)) throw forbidden("Token CSRF ausente ou inválido");
+    }
+    req.auth = { sessionId: s.id, adminId: s.admin.id, email: s.admin.email, csrfToken: s.csrfToken };
+    next();
+  } catch (e) {
+    next(e);
+  }
+}

@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique @db.VarChar(254)
+  passwordHash String    @map("password_hash")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  sessions     Session[]
+
+  @@map("admin_users")
+}
+
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  // Hash SHA-256 do token do cookie; o token em si nunca é gravado.
+  tokenHash  String    @unique @map("token_hash") @db.Char(64)
+  csrfToken  String    @map("csrf_token") @db.VarChar(64)
+  adminId    String    @map("admin_id") @db.Uuid
+  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+
+  @@index([adminId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Plate {
+  id             String              @id @default(uuid()) @db.Uuid
+  // Identificador público e permanente usado em /r/:code. Imutável (trigger no banco).
+  code           String              @unique @db.VarChar(32)
+  businessName   String              @map("business_name") @db.VarChar(120)
+  internalName   String              @map("internal_name") @db.VarChar(120)
+  destinationUrl String              @map("destination_url") @db.VarChar(2048)
+  active         Boolean             @default(true)
+  notes          String?             @db.VarChar(2000)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  changes        DestinationChange[]
+
+  @@index([createdAt])
+  @@index([active])
+  @@map("plates")
+}
+
+model DestinationChange {
+  id          String   @id @default(uuid()) @db.Uuid
+  plateId     String   @map("plate_id") @db.Uuid
+  plate       Plate    @relation(fields: [plateId], references: [id], onDelete: Cascade)
+  previousUrl String?  @map("previous_url") @db.VarChar(2048)
+  newUrl      String   @map("new_url") @db.VarChar(2048)
+  changedAt   DateTime @default(now()) @map("changed_at") @db.Timestamptz(3)
+
+  @@index([plateId, changedAt])
+  @@map("destination_changes")
+}

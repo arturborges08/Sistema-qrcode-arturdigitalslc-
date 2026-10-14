@@ -6,9 +6,7 @@ WORKDIR /app
 ENV PRISMA_HIDE_UPDATE_MESSAGE=1 NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
-# O segredo opcional "ca" só existe em ambientes de build atrás de proxy corporativo; no Railway é ignorado.
-RUN --mount=type=secret,id=ca,required=false \
-    if [ -f /run/secrets/ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca; fi; npm ci
+RUN npm ci
 COPY . .
 RUN npm run build && npm prune --omit=dev
 

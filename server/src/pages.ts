@@ -36,7 +36,7 @@ export function sendPage(res: Response, status: number, kind: PageKind, adminLog
   const p = PAGES[kind];
   const extra =
     adminLoginBack && /^\/r\/[A-Za-z0-9]{4,32}$/.test(adminLoginBack)
-      ? `<a class="admin" href="/login?voltar=${encodeURIComponent(adminLoginBack)}">Sou o administrador: entrar para configurar</a>`
+      ? `<a class="admin" href="/login?voltar=${encodeURIComponent(adminLoginBack)}">Sou o responsável pela plaquinha: entrar para configurar</a>`
       : "";
   res
     .status(status)

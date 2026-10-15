@@ -11,9 +11,14 @@ export function PlateRow({ plate }: { plate: Plate }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className={plate.businessName ? "truncate font-medium text-zinc-900" : "truncate font-medium text-zinc-500"}>
-              {plate.businessName ?? "Não atribuída"}
+              {plate.businessName ?? "Sem nome"}
             </span>
             <span className="truncate text-sm text-zinc-500">· {plate.internalName}</span>
+            {plate.client && (
+              <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800 ring-1 ring-sky-200">
+                {plate.client.name ?? plate.client.email}
+              </span>
+            )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
             <span className="font-mono text-zinc-700">/r/{plate.code}</span>

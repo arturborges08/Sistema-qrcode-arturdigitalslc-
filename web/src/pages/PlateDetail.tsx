@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { ArrowLeft, CheckCircle2, Download, ExternalLink, History, Printer, Trash2 } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { checkUrl, formatDateTime } from "../lib/format";
-import type { HistoryItem, Plate } from "../lib/types";
+import type { Client, HistoryItem, Plate } from "../lib/types";
 import { useAsync } from "../lib/useAsync";
 import { Button, buttonClass, Card, CardHeader, ErrorBox, Field, Input, PageHeader, PendingBadge, Spinner, StatusBadge, Switch, Textarea } from "../components/ui";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -39,7 +39,7 @@ export function PlateDetailPage() {
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-3">
-            <span className="break-words">{plate.businessName ?? "Plaquinha não atribuída"}</span>
+            <span className="break-words">{plate.businessName ?? "Plaquinha sem nome"}</span>
             {plate.configured ? <StatusBadge active={plate.active} /> : <PendingBadge />}
           </span>
         }
@@ -60,6 +60,7 @@ export function PlateDetailPage() {
           )}
           {plate.configured && <DestinationCard plate={plate} onSaved={onSaved} />}
           {plate.configured && <DetailsCard plate={plate} onSaved={onSaved} />}
+          <ClientCard plate={plate} onSaved={onSaved} />
           {!plate.configured && (
             <div className="lg:hidden">
               <QrCard plate={plate} />
@@ -327,11 +328,60 @@ function DetailsCard({ plate, onSaved }: { plate: Plate; onSaved: (p: Plate) => 
   );
 }
 
+function ClientCard({ plate, onSaved }: { plate: Plate; onSaved: (p: Plate) => void }) {
+  const toast = useToast();
+  const clients = useAsync(() => api<{ items: Client[] }>("/clients"), []);
+  const [saving, setSaving] = useState(false);
+
+  async function change(clientId: string) {
+    setSaving(true);
+    try {
+      const updated = await api<Plate>(`/plates/${plate.id}`, { method: "PATCH", body: { clientId: clientId || null } });
+      onSaved(updated);
+      toast("success", updated.client ? `Plaquinha entregue a ${updated.client.name ?? updated.client.email}.` : "Plaquinha voltou a ser só sua.");
+    } catch (err) {
+      toast("error", (err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader title="Cliente revendedor" description="O cliente escolhido consegue escanear esta plaquinha e trocar o link pelo acesso dele." />
+      <div className="p-5">
+        <Field label="Cliente" htmlFor="plate-client">
+          <select
+            id="plate-client"
+            value={plate.clientId ?? ""}
+            disabled={saving || clients.loading}
+            onChange={(e) => change(e.target.value)}
+            className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 focus:border-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 disabled:opacity-60"
+          >
+            <option value="">Nenhum (só você)</option>
+            {clients.data?.items.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name ?? c.email}
+                {c.active ? "" : " (bloqueado)"}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {clients.data && clients.data.items.length === 0 && (
+          <p className="mt-2 text-sm text-zinc-500">
+            Nenhum cliente cadastrado. <Link to="/clientes" className="font-medium underline underline-offset-2">Cadastrar cliente</Link>
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function QrCard({ plate }: { plate: Plate }) {
   const base = `/api/plates/${plate.id}`;
   return (
     <Card>
-      <CardHeader title="QR Code" description={`${plate.businessName ?? "Não atribuída"} · ${plate.internalName}`} />
+      <CardHeader title="QR Code" description={`${plate.businessName ?? "Sem nome"} · ${plate.internalName}`} />
       <div className="space-y-4 p-5">
         <div className="mx-auto max-w-64 rounded-lg border border-zinc-200 bg-white p-2">
           <img src={`${base}/qr.svg`} alt={`QR Code do endereço ${plate.permanentUrl}`} className="aspect-square w-full" width={256} height={256} />
@@ -359,7 +409,7 @@ function QrCard({ plate }: { plate: Plate }) {
   );
 }
 
-function HistoryCard({ loading, error, items }: { loading: boolean; error: string | null; items: HistoryItem[] }) {
+export function HistoryCard({ loading, error, items }: { loading: boolean; error: string | null; items: HistoryItem[] }) {
   return (
     <Card>
       <CardHeader title="Histórico de destinos" />
@@ -377,7 +427,15 @@ function HistoryCard({ loading, error, items }: { loading: boolean; error: strin
         <ol className="divide-y divide-zinc-100" data-testid="history">
           {items.map((h) => (
             <li key={h.id} className="px-5 py-3.5 text-sm">
-              <p className="text-xs text-zinc-500">{formatDateTime(h.changedAt)}</p>
+              <p className="text-xs text-zinc-500">
+                {formatDateTime(h.changedAt)}
+                {h.changedBy && (
+                  <span data-testid="changed-by">
+                    {" · por "}
+                    {h.changedBy.role === "CLIENT" ? `${h.changedBy.name ?? h.changedBy.email} (cliente)` : (h.changedBy.name ?? "administrador")}
+                  </span>
+                )}
+              </p>
               {h.previousUrl === null ? (
                 <p className="mt-1 break-all text-zinc-800">
                   <span className="text-zinc-500">Destino inicial: </span>
@@ -437,7 +495,7 @@ function DangerCard({ plate }: { plate: Plate }) {
         onClose={() => setOpen(false)}
       >
         <p>
-          <strong className="text-zinc-900">{plate.businessName ?? "Não atribuída"}</strong> · {plate.internalName}
+          <strong className="text-zinc-900">{plate.businessName ?? "Sem nome"}</strong> · {plate.internalName}
         </p>
         <p>
           Qualquer plaquinha física com o código <span className="font-mono">{plate.code}</span> deixará de funcionar e passará a mostrar “Link não

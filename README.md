@@ -11,6 +11,18 @@ Cada plaquinha recebe um endereço permanente (`https://seudominio.com.br/r/AbC2
 
 Visitantes que escanearem uma plaquinha em branco veem “Plaquinha ainda não ativada”, sem nenhum dado interno.
 
+## Clientes revendedores
+
+Quem compra plaquinhas para revender ganha um acesso próprio, que só serve para escanear e trocar o link das plaquinhas dele.
+
+1. **Clientes → Novo cliente**: nome, e-mail e senha (gerada automaticamente, mínimo 8 caracteres). Copie o texto de acesso e envie ao cliente.
+2. Na página do cliente, **Entregar lote**: todas as plaquinhas do lote passam a ser dele. Plaquinhas que já são de outro cliente não mudam. Para uma plaquinha avulsa, abra a plaquinha e escolha o cliente.
+3. O cliente entra pelo mesmo endereço (`/login`), vê só as plaquinhas dele, toca em **Escanear plaquinha** e define ou troca o link. Ele também pode escanear com a câmera comum do celular se estiver logado: plaquinha em branco dele abre direto a tela de definir o link.
+
+O que o cliente **não** consegue: ver plaquinhas de outros ou suas, criar plaquinhas, gerar lotes, ativar/desativar, excluir, ver observações internas ou acessar `/api/plates` e `/api/clients` (403). Plaquinha de outra pessoa responde como inexistente (404).
+
+No seu painel você vê, no histórico, quem fez cada troca. **Bloquear acesso** desconecta o cliente na hora; **Gerar nova senha** derruba as sessões dele; **Excluir cliente** apaga o acesso e as plaquinhas continuam funcionando, voltando a ser só suas.
+
 ## Arquitetura
 
 Um único serviço Node.js:
@@ -23,6 +35,8 @@ Um único serviço Node.js:
 
 ```
 server/src/
+  routes/clients.ts    contas de clientes revendedores (só o dono)
+  routes/me.ts         área do cliente: só as plaquinhas dele
   app.ts               montagem do Express (segurança, rotas, frontend)
   index.ts             inicialização, criação do 1º admin, desligamento gracioso
   routes/redirect.ts   GET /r/:code (público)

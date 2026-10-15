@@ -27,15 +27,18 @@ redirectRouter.get("/r/:code", redirectLimiter, cookieParser(), async (req, res)
 
   try {
     // O destino vem exclusivamente do banco. Query string e o restante da requisição são ignorados.
-    const plate = await prisma.plate.findUnique({ where: { code }, select: { id: true, destinationUrl: true, active: true } });
+    const plate = await prisma.plate.findUnique({ where: { code }, select: { id: true, destinationUrl: true, active: true, clientId: true } });
     if (!plate) return sendPage(res, 404, "notFound");
     if (!plate.active) return sendPage(res, 410, "inactive");
 
     if (plate.destinationUrl === null) {
-      // Plaquinha impressa em branco: o administrador logado vai direto para a tela de configuração;
-      // qualquer outra pessoa vê um aviso. O destino é um caminho interno fixo, nunca vindo do visitante.
+      // Plaquinha impressa em branco: o administrador logado, ou o cliente dono dela, vai direto para a tela
+      // de configuração; qualquer outra pessoa vê um aviso. O destino é um caminho interno fixo, nunca vindo do visitante.
       const session = await findSession(req.cookies?.[sessionCookieName()]);
-      if (session) return res.redirect(302, `/plaquinhas/${plate.id}?configurar=1`);
+      if (session?.admin.role === "OWNER") return res.redirect(302, `/plaquinhas/${plate.id}?configurar=1`);
+      if (session?.admin.role === "CLIENT" && session.admin.id === plate.clientId) {
+        return res.redirect(302, `/minhas/${plate.id}?configurar=1`);
+      }
       return sendPage(res, 404, "unconfigured", `/r/${code}`);
     }
 

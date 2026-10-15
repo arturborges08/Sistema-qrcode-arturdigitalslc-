@@ -280,13 +280,105 @@ try {
   const fresh = await browser.newContext();
   const fp = await fresh.newPage();
   await fp.goto(batchItems[9].permanentUrl);
-  await fp.getByText("Sou o administrador").click();
+  await fp.getByText("Sou o responsável pela plaquinha").click();
   await fp.fill("#email", ADMIN.email);
   await fp.fill("#password", ADMIN.password);
   await fp.click("button[type=submit]");
   await fp.waitForURL(new RegExp(`/plaquinhas/${batchItems[9].id}\\?configurar=1`));
   check("admin sem sessão: entra e volta para a plaquinha escaneada", true);
   await fresh.close();
+
+  // ---------- Cliente revendedor ----------
+  const CLIENT = { name: "Revenda E2E", email: `revenda-${Date.now()}@teste.local` };
+  await page.goto(`${BASE}/clientes`);
+  await page.fill("#n-name", CLIENT.name);
+  await page.fill("#n-email", CLIENT.email);
+  CLIENT.password = await page.inputValue("#n-password");
+  await page.getByRole("button", { name: "Cadastrar cliente" }).click();
+  const access = await page.getByTestId("access-message").innerText();
+  check("cadastro de cliente mostra o acesso para enviar", access.includes(CLIENT.email) && access.includes(CLIENT.password) && access.includes("/login"));
+  await page.screenshot({ path: `${SHOTS}/17-cliente-cadastrado.png`, fullPage: true });
+  await page.getByRole("link", { name: "Entregar plaquinhas" }).click();
+  await page.waitForURL(/\/clientes\/[0-9a-f-]{36}$/);
+  await page.selectOption("#assign-batch", BATCH);
+  await page.getByRole("button", { name: "Entregar" }).click();
+  await page.getByText("12 plaquinhas entregues").waitFor();
+  await page.getByTestId("client-plates").locator("li").nth(11).waitFor();
+  check("entregar lote ao cliente lista as 12 plaquinhas", (await page.getByTestId("client-plates").locator("li").count()) === 12);
+  await page.screenshot({ path: `${SHOTS}/18-cliente-detalhe.png`, fullPage: true });
+
+  const cTarget = batchItems[10];
+  const y4m2 = `${SHOTS}/camera2.y4m`;
+  await writeQrVideo(cTarget.permanentUrl, y4m2);
+  const cBrowser = await chromium.launch({
+    executablePath: process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium",
+    args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${y4m2}`],
+  });
+  try {
+    const cCtx = await cBrowser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, permissions: ["camera"], locale: "pt-BR" });
+    const cp = await cCtx.newPage();
+    cp.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text()));
+    cp.on("pageerror", (e) => consoleErrors.push(e.message));
+    await cp.goto(`${BASE}/login`);
+    await cp.fill("#email", CLIENT.email);
+    await cp.fill("#password", CLIENT.password);
+    await cp.click("button[type=submit]");
+    await cp.waitForURL(/\/minhas$/);
+    await cp.getByTestId("my-plates").locator("li").nth(11).waitFor();
+    check("cliente entra e vê só as 12 plaquinhas dele", (await cp.getByTestId("my-plates").locator("li").count()) === 12);
+    check("área do cliente sem rolagem horizontal no celular", !(await cp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)));
+    await cp.screenshot({ path: `${SHOTS}/19-cliente-inicio.png`, fullPage: true });
+
+    await cp.goto(`${BASE}/plaquinhas`);
+    await cp.waitForURL(/\/minhas$/);
+    check("cliente que tenta abrir o painel do dono volta para a área dele", true);
+    const forbidden = await cp.evaluate(async () => (await fetch("/api/plates")).status);
+    check("API do dono recusa o cliente (403)", forbidden === 403, String(forbidden));
+
+    await cp.getByRole("link", { name: "Escanear plaquinha" }).click();
+    await cp.getByRole("button", { name: "Abrir câmera" }).click();
+    await cp.waitForURL(new RegExp(`/minhas/${cTarget.id}\\?configurar=1`), { timeout: 15000 });
+    await cp.getByText("Plaquinha lida. Defina o link").waitFor();
+    check("cliente escaneia com a câmera e cai na tela de definir o link", true);
+    await cp.fill("#m-destinationUrl", `http://127.0.0.1:${DEST_PORT}/link-do-revendedor`);
+    await cp.fill("#m-businessName", "Barbearia do Cliente");
+    await cp.getByRole("button", { name: "Salvar e ativar" }).click();
+    await cp.getByText("Link salvo").waitFor();
+    await cp.screenshot({ path: `${SHOTS}/20-cliente-link-salvo.png`, fullPage: true });
+    await anon.goto(cTarget.permanentUrl);
+    check("link definido pelo cliente vale no QR", (await anon.locator("h1").innerText()) === "DESTINO /link-do-revendedor");
+
+    // Trocar o link depois
+    await cp.fill("#m-destinationUrl", `http://127.0.0.1:${DEST_PORT}/link-trocado`);
+    await cp.getByRole("button", { name: "Salvar", exact: true }).click();
+    await cp.getByTestId("destination-url").filter({ hasText: "link-trocado" }).waitFor();
+    await anon.goto(cTarget.permanentUrl);
+    check("cliente troca o link e o QR passa a levar ao novo", (await anon.locator("h1").innerText()) === "DESTINO /link-trocado");
+
+    // Plaquinha que não é do cliente
+    const notMine = await page.evaluate(async () => (await (await fetch("/api/plates?client=none&pageSize=1")).json()).items[0]);
+    await cp.goto(`${BASE}/minhas/escanear`);
+    await cp.fill("#code", notMine.code);
+    await cp.getByRole("button", { name: "Abrir", exact: true }).click();
+    await cp.getByText("não está na sua conta").waitFor();
+    check("cliente não abre plaquinha que não é dele", true);
+
+    // Cliente escaneando com a câmera comum do celular, já logado
+    const blank2 = batchItems[11];
+    await cp.goto(blank2.permanentUrl);
+    await cp.waitForURL(new RegExp(`/minhas/${blank2.id}\\?configurar=1`));
+    check("cliente logado que lê plaquinha em branco pela câmera comum cai na tela dele", true);
+  } catch (e) {
+    check("fluxo do cliente revendedor", false, e.message);
+  } finally {
+    await cBrowser.close();
+  }
+
+  // O dono vê quem trocou
+  await page.goto(`${BASE}/plaquinhas/${cTarget.id}`);
+  await page.getByTestId("changed-by").first().waitFor();
+  check("dono vê no histórico que o cliente trocou o link", (await page.getByTestId("changed-by").first().innerText()).includes("Revenda E2E (cliente)"));
+  check("dono vê o cliente na plaquinha", (await page.inputValue("#plate-client")) !== "");
 
   // Logout
   await page.getByRole("button", { name: "Sair" }).click();
@@ -295,7 +387,9 @@ try {
   await page.waitForURL("**/login");
   check("logout encerra a sessão", true);
 
-  check("nenhum erro no console do navegador (inclui violações de CSP)", consoleErrors.filter((e) => !e.includes("401") && !e.includes("Unauthorized")).length === 0, consoleErrors.join(" | "));
+  // 401 (sem sessão), 403 (cliente no painel do dono) e 404 (plaquinha de outro) são provocados de propósito acima.
+  const unexpected = consoleErrors.filter((e) => !/status of (401|403|404)\b/.test(e));
+  check("nenhum erro no console do navegador (inclui violações de CSP)", unexpected.length === 0, unexpected.join(" | "));
 } catch (e) {
   check("execução sem exceções", false, e.message);
 } finally {

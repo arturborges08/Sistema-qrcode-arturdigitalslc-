@@ -26,7 +26,7 @@ export async function upsertAdmin(emailRaw: string, password: string) {
  * Depois que o administrador existe, essas variáveis são ignoradas e podem ser removidas.
  */
 export async function bootstrapAdmin(email?: string, password?: string) {
-  const count = await prisma.adminUser.count();
+  const count = await prisma.adminUser.count({ where: { role: "OWNER" } });
   if (count > 0) {
     if (password) logger.warn("admin_password_env_ignored", { hint: "Administrador já existe; remova ADMIN_PASSWORD das variáveis." });
     return;

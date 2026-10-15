@@ -1,14 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, ApiError, setCsrfToken } from "./lib/api";
+import type { Role } from "./lib/types";
 
 interface Session {
   email: string;
+  role: Role;
+  name: string | null;
   csrfToken: string;
 }
 
 interface AuthState {
   status: "loading" | "authenticated" | "anonymous";
   email: string | null;
+  role: Role | null;
+  name: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -18,10 +23,14 @@ const Ctx = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthState["status"]>("loading");
   const [email, setEmail] = useState<string | null>(null);
+  const [role, setRole] = useState<Role | null>(null);
+  const [name, setName] = useState<string | null>(null);
 
   const apply = useCallback((s: Session | null) => {
     setCsrfToken(s?.csrfToken ?? null);
     setEmail(s?.email ?? null);
+    setRole(s?.role ?? null);
+    setName(s?.name ?? null);
     setStatus(s ? "authenticated" : "anonymous");
   }, []);
 
@@ -50,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     apply(null);
   }, [apply]);
 
-  return <Ctx.Provider value={{ status, email, login, logout }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ status, email, role, name, login, logout }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {

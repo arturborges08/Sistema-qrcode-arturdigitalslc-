@@ -19,10 +19,10 @@ export async function resetData() {
 }
 
 /** Faz login e devolve um cliente autenticado que envia cookie e token CSRF. */
-export async function loginAgent() {
+export async function loginAgent(creds: { email: string; password: string } = ADMIN) {
   const ip = nextIp();
   const agent = request.agent(app);
-  const res = await agent.post("/api/auth/login").set("X-Forwarded-For", ip).send(ADMIN);
+  const res = await agent.post("/api/auth/login").set("X-Forwarded-For", ip).send(creds);
   if (res.status !== 200) throw new Error(`login falhou: ${res.status} ${JSON.stringify(res.body)}`);
   const csrf = res.body.csrfToken as string;
   const withHeaders = (r: request.Test) => r.set("X-Forwarded-For", ip).set("X-CSRF-Token", csrf);

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Camera, CameraOff, ScanLine } from "lucide-react";
 import { api } from "../lib/api";
-import type { Plate } from "../lib/types";
 import { Button, Card, CardHeader, Field, Input, PageHeader } from "../components/ui";
 
 /** Extrai o código de uma leitura: aceita a URL completa (…/r/CODIGO) ou só o código. */
@@ -17,7 +16,23 @@ export function extractCode(text: string): string | null {
   }
 }
 
-export function ScanPage() {
+interface ScanTarget {
+  id: string;
+  configured: boolean;
+}
+
+const ownerLookup = (code: string) => api<ScanTarget>(`/plates/by-code/${encodeURIComponent(code)}`);
+const ownerPath = (p: ScanTarget) => `/plaquinhas/${p.id}${p.configured ? "" : "?configurar=1"}`;
+
+export function ScanPage({
+  lookup = ownerLookup,
+  pathFor = ownerPath,
+  description = "Aponte a câmera para o QR Code para abrir a plaquinha e definir ou trocar o link.",
+}: {
+  lookup?: (code: string) => Promise<ScanTarget>;
+  pathFor?: (p: ScanTarget) => string;
+  description?: string;
+}) {
   const nav = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -38,9 +53,9 @@ export function ScanPage() {
     busy.current = true;
     setMessage("Procurando plaquinha…");
     try {
-      const plate = await api<Plate>(`/plates/by-code/${encodeURIComponent(code)}`);
+      const plate = await lookup(code);
       stop();
-      nav(`/plaquinhas/${plate.id}${plate.configured ? "" : "?configurar=1"}`);
+      nav(pathFor(plate));
     } catch (e) {
       setMessage((e as Error).message);
       setTimeout(() => (busy.current = false), 1500);
@@ -94,7 +109,7 @@ export function ScanPage() {
 
   return (
     <div className="mx-auto max-w-lg">
-      <PageHeader title="Escanear plaquinha" description="Aponte a câmera para o QR Code para abrir a plaquinha e definir ou trocar o link." />
+      <PageHeader title="Escanear plaquinha" description={description} />
       <Card>
         <div className="relative aspect-square overflow-hidden rounded-t-xl bg-zinc-900">
           <video ref={videoRef} playsInline muted className={state === "scanning" ? "size-full object-cover" : "hidden"} />

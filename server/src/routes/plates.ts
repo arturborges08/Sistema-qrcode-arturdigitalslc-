@@ -4,13 +4,13 @@ import { z } from "zod";
 import { permanentUrl } from "../config.js";
 import { prisma } from "../db.js";
 import { generateCode } from "../lib/code.js";
-import { notFound } from "../lib/errors.js";
+import { AppError, notFound } from "../lib/errors.js";
 import { PNG_SIZES, qrPng, qrSvg } from "../lib/qr.js";
 import { destinationUrlSchema } from "../lib/url.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireOwner } from "../middleware/auth.js";
 
 export const platesRouter = Router();
-platesRouter.use(requireAuth);
+platesRouter.use(requireAuth, requireOwner);
 
 const text = (label: string, max: number) =>
   z
@@ -42,6 +42,8 @@ const UpdateSchema = z
     destinationUrl: destinationUrlSchema.optional(),
     active: z.boolean().optional(),
     notes: notes.optional(),
+    // Atribui a plaquinha a um cliente revendedor (null = remove do cliente).
+    clientId: z.uuid("Cliente inválido").nullable().optional(),
   })
   .strict();
 
@@ -51,6 +53,7 @@ const ListQuery = z.object({
   q: z.string().trim().max(120).optional(),
   status: z.enum(["all", "active", "inactive", "unconfigured"]).default("all"),
   batch: z.string().trim().min(1).max(80).optional(),
+  client: z.union([z.uuid(), z.literal("none")]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(20),
 });
@@ -68,7 +71,10 @@ const BatchSchema = z.object({
 
 const CodeParam = z.object({ code: z.string().regex(/^[A-Za-z0-9]{4,32}$/, "Código inválido") });
 
-export function toDto(p: Plate) {
+export const withClient = { client: { select: { id: true, name: true, email: true } } } as const;
+type PlateWithClient = Plate & { client?: { id: string; name: string | null; email: string } | null };
+
+export function toDto(p: PlateWithClient) {
   return {
     id: p.id,
     code: p.code,
@@ -80,13 +86,15 @@ export function toDto(p: Plate) {
     batchName: p.batchName,
     active: p.active,
     notes: p.notes,
+    clientId: p.clientId,
+    client: p.client ? { id: p.client.id, name: p.client.name, email: p.client.email } : null,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
   };
 }
 
 async function getPlateOr404(id: string) {
-  const plate = await prisma.plate.findUnique({ where: { id } });
+  const plate = await prisma.plate.findUnique({ where: { id }, include: withClient });
   if (!plate) throw notFound("Plaquinha não encontrada");
   return plate;
 }
@@ -98,7 +106,7 @@ platesRouter.get("/stats", async (_req, res, next) => {
       prisma.plate.count(),
       prisma.plate.count({ where: { active: true, destinationUrl: { not: null } } }),
       prisma.plate.count({ where: { active: false } }),
-      prisma.plate.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
+      prisma.plate.findMany({ orderBy: { createdAt: "desc" }, take: 5, include: withClient }),
     ]);
     res.json({ total, active, inactive, unconfigured: total - active - inactive, recent: recent.map(toDto) });
   } catch (e) {
@@ -108,12 +116,13 @@ platesRouter.get("/stats", async (_req, res, next) => {
 
 platesRouter.get("/", async (req, res, next) => {
   try {
-    const { q, status, batch, page, pageSize } = ListQuery.parse(req.query);
+    const { q, status, batch, client, page, pageSize } = ListQuery.parse(req.query);
     const where: Prisma.PlateWhereInput = {};
     if (status === "active") Object.assign(where, { active: true, destinationUrl: { not: null } });
     if (status === "inactive") where.active = false;
     if (status === "unconfigured") Object.assign(where, { active: true, destinationUrl: null });
     if (batch) where.batchName = batch;
+    if (client) where.clientId = client === "none" ? null : client;
     if (q) {
       where.OR = [
         { businessName: { contains: q, mode: "insensitive" } },
@@ -123,7 +132,7 @@ platesRouter.get("/", async (req, res, next) => {
     }
     const [total, items] = await Promise.all([
       prisma.plate.count({ where }),
-      prisma.plate.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize }),
+      prisma.plate.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize, include: withClient }),
     ]);
     res.json({ total, page, pageSize, items: items.map(toDto) });
   } catch (e) {
@@ -140,7 +149,7 @@ platesRouter.post("/", async (req, res, next) => {
         const plate = await prisma.$transaction(async (tx) => {
           const created = await tx.plate.create({ data: { ...data, code: generateCode() } });
           await tx.destinationChange.create({
-            data: { plateId: created.id, previousUrl: null, newUrl: data.destinationUrl },
+            data: { plateId: created.id, previousUrl: null, newUrl: data.destinationUrl, changedById: req.auth!.adminId },
           });
           return created;
         });
@@ -242,7 +251,7 @@ platesRouter.get("/batch-qr", async (req, res, next) => {
 platesRouter.get("/by-code/:code", async (req, res, next) => {
   try {
     const { code } = CodeParam.parse(req.params);
-    const plate = await prisma.plate.findUnique({ where: { code } });
+    const plate = await prisma.plate.findUnique({ where: { code }, include: withClient });
     if (!plate) throw notFound("Nenhuma plaquinha com esse código");
     res.json(toDto(plate));
   } catch (e) {
@@ -263,15 +272,21 @@ platesRouter.patch("/:id", async (req, res, next) => {
   try {
     const { id } = IdParam.parse(req.params);
     const data = UpdateSchema.parse(req.body ?? {});
+    if (data.clientId) {
+      const c = await prisma.adminUser.findUnique({ where: { id: data.clientId }, select: { role: true } });
+      if (c?.role !== "CLIENT") throw new AppError(400, "Cliente não encontrado", "validation_error");
+    }
     const updated = await prisma.$transaction(async (tx) => {
       // FOR UPDATE evita perder um registro de histórico em edições simultâneas.
       const rows = await tx.$queryRaw<{ destination_url: string | null }[]>`
         SELECT destination_url FROM plates WHERE id = ${id}::uuid FOR UPDATE`;
       if (rows.length === 0) throw notFound("Plaquinha não encontrada");
       const previousUrl = rows[0].destination_url;
-      const plate = await tx.plate.update({ where: { id }, data });
+      const plate = await tx.plate.update({ where: { id }, data, include: withClient });
       if (data.destinationUrl !== undefined && data.destinationUrl !== previousUrl) {
-        await tx.destinationChange.create({ data: { plateId: id, previousUrl, newUrl: data.destinationUrl } });
+        await tx.destinationChange.create({
+          data: { plateId: id, previousUrl, newUrl: data.destinationUrl, changedById: req.auth!.adminId },
+        });
       }
       return plate;
     });
@@ -296,19 +311,26 @@ platesRouter.get("/:id/history", async (req, res, next) => {
   try {
     const { id } = IdParam.parse(req.params);
     await getPlateOr404(id);
-    const items = await prisma.destinationChange.findMany({ where: { plateId: id }, orderBy: { changedAt: "desc" } });
-    res.json({
-      items: items.map((c) => ({
-        id: c.id,
-        previousUrl: c.previousUrl,
-        newUrl: c.newUrl,
-        changedAt: c.changedAt.toISOString(),
-      })),
-    });
+    res.json({ items: await historyItems(id) });
   } catch (e) {
     next(e);
   }
 });
+
+export async function historyItems(plateId: string) {
+  const items = await prisma.destinationChange.findMany({
+    where: { plateId },
+    orderBy: { changedAt: "desc" },
+    include: { changedBy: { select: { name: true, email: true, role: true } } },
+  });
+  return items.map((c) => ({
+    id: c.id,
+    previousUrl: c.previousUrl,
+    newUrl: c.newUrl,
+    changedAt: c.changedAt.toISOString(),
+    changedBy: c.changedBy ? { name: c.changedBy.name, email: c.changedBy.email, role: c.changedBy.role } : null,
+  }));
+}
 
 function fileBase(p: Plate) {
   const slug = (p.businessName ?? p.batchName ?? "plaquinha")

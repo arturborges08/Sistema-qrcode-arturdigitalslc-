@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { AppError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
-import { getDummyHash, verifyPassword } from "../lib/password.js";
+import { getDummyHash, hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "../lib/password.js";
 import { createSession, destroySession, sessionCookieName, sessionCookieOptions } from "../lib/session.js";
 import { requireAuth } from "../middleware/auth.js";
 import { loginLimiter } from "../middleware/rateLimit.js";
@@ -26,18 +26,52 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
       logger.warn("login_failed", { ip: req.ip });
       throw new AppError(401, "E-mail ou senha inválidos", "invalid_credentials");
     }
+    if (!admin.active) {
+      logger.warn("login_inactive", { ip: req.ip });
+      throw new AppError(403, "Seu acesso está desativado. Fale com quem vendeu as plaquinhas.", "account_inactive");
+    }
     await destroySession(req.cookies?.[sessionCookieName()]);
     const { token, csrfToken } = await createSession(admin.id);
     res.cookie(sessionCookieName(), token, sessionCookieOptions());
     logger.info("login_ok", { ip: req.ip });
-    res.json({ email: admin.email, csrfToken });
+    res.json({ email: admin.email, role: admin.role, name: admin.name, csrfToken });
   } catch (e) {
     next(e);
   }
 });
 
 authRouter.get("/session", requireAuth, (req, res) => {
-  res.json({ email: req.auth!.email, csrfToken: req.auth!.csrfToken });
+  const { email, role, name, csrfToken } = req.auth!;
+  res.json({ email, role, name, csrfToken });
+});
+
+export const CLIENT_MIN_PASSWORD = 8;
+
+const PasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Informe a senha atual").max(1024),
+  newPassword: z.string().max(1024),
+});
+
+// Troca da própria senha. Mantém a sessão atual e encerra as outras.
+authRouter.post("/password", loginLimiter, requireAuth, async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = PasswordSchema.parse(req.body ?? {});
+    const min = req.auth!.role === "CLIENT" ? CLIENT_MIN_PASSWORD : MIN_PASSWORD_LENGTH;
+    if (newPassword.length < min) {
+      throw new AppError(400, `A nova senha deve ter pelo menos ${min} caracteres`, "validation_error");
+    }
+    const user = await prisma.adminUser.findUniqueOrThrow({ where: { id: req.auth!.adminId } });
+    if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+      throw new AppError(400, "A senha atual está incorreta", "invalid_password");
+    }
+    await prisma.$transaction([
+      prisma.adminUser.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(newPassword) } }),
+      prisma.session.deleteMany({ where: { adminId: user.id, id: { not: req.auth!.sessionId } } }),
+    ]);
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
 });
 
 authRouter.post("/logout", requireAuth, async (req, res, next) => {

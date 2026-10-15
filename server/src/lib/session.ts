@@ -34,10 +34,10 @@ export async function findSession(token: string | undefined) {
   if (!token || token.length > 128) return null;
   const s = await prisma.session.findUnique({
     where: { tokenHash: hashToken(token) },
-    include: { admin: { select: { id: true, email: true } } },
+    include: { admin: { select: { id: true, email: true, role: true, name: true, active: true } } },
   });
   if (!s) return null;
-  if (s.expiresAt.getTime() <= Date.now()) {
+  if (s.expiresAt.getTime() <= Date.now() || !s.admin.active) {
     await prisma.session.delete({ where: { id: s.id } }).catch(() => undefined);
     return null;
   }

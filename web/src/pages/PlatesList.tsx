@@ -19,6 +19,7 @@ export function PlatesListPage() {
   const q = params.get("q") ?? "";
   const status = params.get("status") ?? "all";
   const lote = params.get("lote") ?? "";
+  const cliente = params.get("cliente") ?? "";
   const page = Math.max(1, Number(params.get("page") ?? 1) || 1);
   const [term, setTerm] = useState(q);
 
@@ -28,8 +29,9 @@ export function PlatesListPage() {
     const sp = new URLSearchParams({ status, page: String(page), pageSize: "20" });
     if (q) sp.set("q", q);
     if (lote) sp.set("batch", lote);
+    if (cliente) sp.set("client", cliente);
     return api<PlateList>(`/plates?${sp}`);
-  }, [q, status, page, lote]);
+  }, [q, status, page, lote, cliente]);
 
   function update(next: Record<string, string>) {
     const sp = new URLSearchParams(params);
@@ -54,6 +56,14 @@ export function PlatesListPage() {
                 <>
                   {" "}· lote <strong className="font-medium text-zinc-700">{lote}</strong>{" "}
                   <button className="underline underline-offset-2" onClick={() => update({ lote: "", page: "1" })}>limpar</button>
+                </>
+              )}
+              {cliente && (
+                <>
+                  {" "}· {cliente === "none" ? "sem cliente" : (
+                    <>cliente <strong className="font-medium text-zinc-700">{data.items[0]?.client?.name ?? "selecionado"}</strong></>
+                  )}{" "}
+                  <button className="underline underline-offset-2" onClick={() => update({ cliente: "", page: "1" })}>limpar</button>
                 </>
               )}
             </>

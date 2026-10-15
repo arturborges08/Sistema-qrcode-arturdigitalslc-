@@ -10,6 +10,8 @@ import { errorHandler } from "./middleware/errors.js";
 import { apiLimiter } from "./middleware/rateLimit.js";
 import { authRouter } from "./routes/auth.js";
 import { platesRouter } from "./routes/plates.js";
+import { clientsRouter } from "./routes/clients.js";
+import { meRouter } from "./routes/me.js";
 import { redirectRouter } from "./routes/redirect.js";
 import { sendPage } from "./pages.js";
 
@@ -75,6 +77,8 @@ export function createApp(opts: { webDir?: string } = {}) {
   });
   api.use("/auth", authRouter);
   api.use("/plates", platesRouter);
+  api.use("/clients", clientsRouter);
+  api.use("/me", meRouter);
   api.use((_req, res) => {
     res.status(404).json({ error: { code: "not_found", message: "Rota não encontrada" } });
   });

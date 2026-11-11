@@ -24,11 +24,17 @@ model AdminUser {
   name         String?             @db.VarChar(120)
   // Conta desativada não consegue entrar (as sessões abertas são encerradas).
   active       Boolean             @default(true)
+  // true = criou a própria conta pela página de cadastro e paga o plano mensal.
+  // false = administrador ou cliente cadastrado pelo administrador (isento).
+  selfSignup   Boolean             @default(false) @map("self_signup")
+  // Até quando o plano mensal está pago (só vale para selfSignup = true).
+  paidUntil    DateTime?           @map("paid_until") @db.Timestamptz(3)
   createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
   sessions     Session[]
   plates       Plate[]
   changes      DestinationChange[]
+  payments     Payment[]
 
   @@index([role])
   @@map("admin_users")
@@ -89,4 +95,31 @@ model DestinationChange {
 
   @@index([plateId, changedAt])
   @@map("destination_changes")
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+}
+
+// Cobrança do plano mensal via link de checkout da InfinitePay.
+// O id deste registro é enviado como order_nsu, e volta no webhook e no retorno do pagamento.
+model Payment {
+  id              String        @id @default(uuid()) @db.Uuid
+  userId          String        @map("user_id") @db.Uuid
+  user            AdminUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountCents     Int           @map("amount_cents")
+  status          PaymentStatus @default(PENDING)
+  checkoutUrl     String?       @map("checkout_url") @db.VarChar(2048)
+  transactionNsu  String?       @unique @map("transaction_nsu") @db.VarChar(128)
+  invoiceSlug     String?       @map("invoice_slug") @db.VarChar(128)
+  captureMethod   String?       @map("capture_method") @db.VarChar(32)
+  paidAmountCents Int?          @map("paid_amount_cents")
+  paidAt          DateTime?     @map("paid_at") @db.Timestamptz(3)
+  // Período de acesso liberado por este pagamento.
+  periodEnd       DateTime?     @map("period_end") @db.Timestamptz(3)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId, createdAt])
+  @@map("payments")
 }

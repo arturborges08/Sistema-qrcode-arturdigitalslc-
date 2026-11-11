@@ -15,6 +15,9 @@ export default defineConfig({
       APP_BASE_URL: "https://qr.teste.local",
       ADMIN_EMAIL: "",
       ADMIN_PASSWORD: "",
+      // Servidor falso da InfinitePay iniciado em tests/billing.test.ts.
+      INFINITEPAY_HANDLE: "loja-teste",
+      INFINITEPAY_API_URL: "http://127.0.0.1:4599",
     },
   },
 });

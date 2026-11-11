@@ -28,3 +28,19 @@ export const redirectLimiter = rateLimit({
   legacyHeaders: false,
   message: "Muitas requisições. Tente novamente em instantes.",
 });
+
+export const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: json("Muitos cadastros a partir desta conexão. Tente novamente mais tarde."),
+});
+
+export const billingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: json("Muitas tentativas de pagamento. Aguarde alguns minutos."),
+});

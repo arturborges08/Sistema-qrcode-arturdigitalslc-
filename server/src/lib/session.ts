@@ -34,7 +34,7 @@ export async function findSession(token: string | undefined) {
   if (!token || token.length > 128) return null;
   const s = await prisma.session.findUnique({
     where: { tokenHash: hashToken(token) },
-    include: { admin: { select: { id: true, email: true, role: true, name: true, active: true } } },
+    include: { admin: { select: { id: true, email: true, role: true, name: true, active: true, selfSignup: true, paidUntil: true } } },
   });
   if (!s) return null;
   if (s.expiresAt.getTime() <= Date.now() || !s.admin.active) {

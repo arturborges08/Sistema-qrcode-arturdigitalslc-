@@ -13,6 +13,7 @@ import { platesRouter } from "./routes/plates.js";
 import { clientsRouter } from "./routes/clients.js";
 import { meRouter } from "./routes/me.js";
 import { redirectRouter } from "./routes/redirect.js";
+import { billingRouter } from "./routes/billing.js";
 import { sendPage } from "./pages.js";
 
 export function createApp(opts: { webDir?: string } = {}) {
@@ -79,6 +80,7 @@ export function createApp(opts: { webDir?: string } = {}) {
   api.use("/plates", platesRouter);
   api.use("/clients", clientsRouter);
   api.use("/me", meRouter);
+  api.use("/billing", billingRouter);
   api.use((_req, res) => {
     res.status(404).json({ error: { code: "not_found", message: "Rota não encontrada" } });
   });

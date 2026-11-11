@@ -6,7 +6,10 @@ import { logger } from "../lib/logger.js";
 import { getDummyHash, hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "../lib/password.js";
 import { createSession, destroySession, sessionCookieName, sessionCookieOptions } from "../lib/session.js";
 import { requireAuth } from "../middleware/auth.js";
-import { loginLimiter } from "../middleware/rateLimit.js";
+import { loginLimiter, signupLimiter } from "../middleware/rateLimit.js";
+import { emailSchema } from "../admin.js";
+import { billingDto, planInfo } from "../lib/billing.js";
+import { Prisma } from "@prisma/client";
 
 const LoginSchema = z.object({
   email: z.string().trim().toLowerCase().max(254),
@@ -34,18 +37,65 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
     const { token, csrfToken } = await createSession(admin.id);
     res.cookie(sessionCookieName(), token, sessionCookieOptions());
     logger.info("login_ok", { ip: req.ip });
-    res.json({ email: admin.email, role: admin.role, name: admin.name, csrfToken });
+    res.json(sessionDto({ ...admin, csrfToken }));
   } catch (e) {
     next(e);
   }
 });
 
+function sessionDto(u: {
+  email: string;
+  role: "OWNER" | "CLIENT";
+  name: string | null;
+  csrfToken: string;
+  selfSignup: boolean;
+  paidUntil: Date | null;
+}) {
+  return { email: u.email, role: u.role, name: u.name, csrfToken: u.csrfToken, selfSignup: u.selfSignup, billing: billingDto(u) };
+}
+
 authRouter.get("/session", requireAuth, (req, res) => {
-  const { email, role, name, csrfToken } = req.auth!;
-  res.json({ email, role, name, csrfToken });
+  res.json(sessionDto(req.auth!));
 });
 
 export const CLIENT_MIN_PASSWORD = 8;
+
+const SignupSchema = z
+  .object({
+    name: z.string({ error: "Informe seu nome" }).trim().min(1, "Informe seu nome").max(120, "O nome deve ter no máximo 120 caracteres"),
+    email: z.string({ error: "Informe seu e-mail" }).trim().toLowerCase().pipe(emailSchema),
+    password: z
+      .string({ error: "Crie uma senha" })
+      .min(CLIENT_MIN_PASSWORD, `A senha deve ter pelo menos ${CLIENT_MIN_PASSWORD} caracteres`)
+      .max(1024),
+  })
+  .strict();
+
+// Cadastro público: cria uma conta de assinante, que precisa pagar o plano mensal para usar o sistema.
+authRouter.post("/signup", signupLimiter, async (req, res, next) => {
+  try {
+    if (!req.is("application/json")) throw new AppError(415, "Envie os dados como JSON", "unsupported_media_type");
+    if (!planInfo().signupEnabled) throw new AppError(403, "O cadastro está fechado no momento.", "signup_disabled");
+    const data = SignupSchema.parse(req.body ?? {});
+    const user = await prisma.adminUser
+      .create({
+        data: { role: "CLIENT", selfSignup: true, name: data.name, email: data.email, passwordHash: await hashPassword(data.password) },
+      })
+      .catch((e) => {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          throw new AppError(409, "Já existe uma conta com esse e-mail. Use \"Entrar\".", "email_taken");
+        }
+        throw e;
+      });
+    await destroySession(req.cookies?.[sessionCookieName()]);
+    const { token, csrfToken } = await createSession(user.id);
+    res.cookie(sessionCookieName(), token, sessionCookieOptions());
+    logger.info("signup_ok", { ip: req.ip });
+    res.status(201).json(sessionDto({ ...user, csrfToken }));
+  } catch (e) {
+    next(e);
+  }
+});
 
 const PasswordSchema = z.object({
   currentPassword: z.string().min(1, "Informe a senha atual").max(1024),

@@ -7,6 +7,7 @@ import { normalizeDestinationUrl } from "../lib/url.js";
 import { sendPage } from "../pages.js";
 import { redirectLimiter } from "../middleware/rateLimit.js";
 import { findSession, sessionCookieName } from "../lib/session.js";
+import { redirectAllowed } from "../lib/billing.js";
 
 export const redirectRouter = Router();
 
@@ -27,9 +28,18 @@ redirectRouter.get("/r/:code", redirectLimiter, cookieParser(), async (req, res)
 
   try {
     // O destino vem exclusivamente do banco. Query string e o restante da requisição são ignorados.
-    const plate = await prisma.plate.findUnique({ where: { code }, select: { id: true, destinationUrl: true, active: true, clientId: true } });
+    const plate = await prisma.plate.findUnique({ where: { code }, select: {
+        id: true,
+        destinationUrl: true,
+        active: true,
+        clientId: true,
+        client: { select: { role: true, selfSignup: true, paidUntil: true } },
+      },
+    });
     if (!plate) return sendPage(res, 404, "notFound");
     if (!plate.active) return sendPage(res, 410, "inactive");
+    // Assinante com o plano vencido (passada a tolerância): o QR Code para de redirecionar até a renovação.
+    if (plate.client && !redirectAllowed(plate.client)) return sendPage(res, 402, "planExpired");
 
     if (plate.destinationUrl === null) {
       // Plaquinha impressa em branco: o administrador logado, ou o cliente dono dela, vai direto para a tela

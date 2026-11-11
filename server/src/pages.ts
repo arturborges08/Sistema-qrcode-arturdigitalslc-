@@ -14,6 +14,10 @@ const PAGES = {
     title: "Plaquinha ainda não ativada",
     body: "Esta plaquinha ainda não foi configurada pelo fornecedor. Tente novamente mais tarde.",
   },
+  planExpired: {
+    title: "Link temporariamente indisponível",
+    body: "O plano desta plaquinha está vencido. Se você é o responsável, entre na sua conta e renove o plano para o link voltar a funcionar na hora.",
+  },
   error: {
     title: "Não foi possível abrir o link",
     body: "Ocorreu um erro temporário. Tente ler o código novamente em alguns instantes.",

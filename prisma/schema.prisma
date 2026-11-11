@@ -123,3 +123,12 @@ model Payment {
   @@index([userId, createdAt])
   @@map("payments")
 }
+
+// Configurações editadas pelo administrador no painel (ex.: InfiniteTag da InfinitePay).
+model AppSetting {
+  key       String   @id @db.VarChar(64)
+  value     String   @db.VarChar(512)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("app_settings")
+}

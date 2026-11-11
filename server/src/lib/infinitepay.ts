@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { logger } from "./logger.js";
+import { getInfinitePayHandle } from "./settings.js";
 
 /**
  * Integração com o Checkout Integrado da InfinitePay.
@@ -69,8 +70,8 @@ export async function createCheckoutLink(input: {
   webhookUrl: string;
   customer?: { name?: string; email?: string };
 }): Promise<string> {
-  const handle = config().INFINITEPAY_HANDLE;
-  if (!handle) throw new InfinitePayError("INFINITEPAY_HANDLE não configurado");
+  const { handle } = await getInfinitePayHandle();
+  if (!handle) throw new InfinitePayError("InfiniteTag não configurada");
   const customer: Record<string, string> = {};
   if (input.customer?.name) customer.name = input.customer.name;
   if (input.customer?.email) customer.email = input.customer.email;
@@ -103,8 +104,8 @@ export interface PaymentCheckResult {
 }
 
 export async function checkPayment(input: { orderNsu: string; transactionNsu: string; slug: string }): Promise<PaymentCheckResult> {
-  const handle = config().INFINITEPAY_HANDLE;
-  if (!handle) throw new InfinitePayError("INFINITEPAY_HANDLE não configurado");
+  const { handle } = await getInfinitePayHandle();
+  if (!handle) throw new InfinitePayError("InfiniteTag não configurada");
   const { status, data } = await post("/payment_check", {
     handle,
     order_nsu: input.orderNsu,

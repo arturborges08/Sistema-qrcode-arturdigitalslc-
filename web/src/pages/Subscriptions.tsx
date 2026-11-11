@@ -7,6 +7,7 @@ import { useAsync } from "../lib/useAsync";
 import { Button, Card, CardHeader, EmptyState, ErrorBox, Input, PageHeader, Spinner, cx } from "../components/ui";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CopyButton } from "../components/CopyButton";
+import { RevenueChart } from "../components/RevenueChart";
 import { useToast } from "../components/Toast";
 
 interface AdminPayment {
@@ -25,11 +26,13 @@ interface Overview {
   subscribers: { total: number; active: number; expired: number; neverPaid: number; expiringSoon: number };
   revenue: { monthCents: number; monthCount: number; last30Cents: number; last30Count: number; totalCents: number; totalCount: number };
   pendingCheckouts7d: number;
+  daily: { date: string; cents: number }[];
   recentPayments: AdminPayment[];
   integration: {
     provider: string;
     handleConfigured: boolean;
     handle: string | null;
+    handleSource: "painel" | "variavel" | null;
     apiUrl: string;
     webhookUrl: string;
     redirectUrl: string;
@@ -63,14 +66,14 @@ const FILTERS = [
 ] as const;
 
 function Metric({ icon, label, value, hint, tone = "zinc" }: { icon: ReactNode; label: string; value: string | number; hint?: string; tone?: "zinc" | "brand" | "emerald" | "amber" }) {
-  const toneCls = { zinc: "bg-zinc-100 text-zinc-600", brand: "bg-brand-50 text-brand-700", emerald: "bg-emerald-50 text-emerald-700", amber: "bg-amber-50 text-amber-700" }[tone];
+  const toneCls = { zinc: "bg-zinc-100 text-zinc-600", brand: "bg-brand-50 text-brand-700", emerald: "bg-lime-100 text-lime-800", amber: "bg-amber-50 text-amber-700" }[tone];
   return (
-    <Card className="px-5 py-4">
+    <Card className="px-6 py-5">
       <div className="flex items-center gap-2 text-sm text-zinc-500">
-        <span className={cx("flex size-7 items-center justify-center rounded-lg", toneCls)}>{icon}</span>
+        <span className={cx("flex size-8 items-center justify-center rounded-xl", toneCls)}>{icon}</span>
         {label}
       </div>
-      <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight text-zinc-900">{value}</p>
+      <p className="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-zinc-900 sm:text-4xl">{value}</p>
       {hint && <p className="mt-0.5 text-xs text-zinc-500">{hint}</p>}
     </Card>
   );
@@ -171,8 +174,18 @@ export function SubscriptionsPage() {
             pagamentos). Cortesias não entram na soma. As taxas da InfinitePay não vêm pela API: confira o valor líquido no app da InfinitePay.
           </p>
 
+          <Card className="mt-6 p-6">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-base font-semibold text-zinc-900">Receita por dia</h2>
+              <p className="text-sm text-zinc-500">Últimos 30 dias · {formatMoney(o.revenue.last30Cents)}</p>
+            </div>
+            <div className="mt-4">
+              <RevenueChart data={o.daily} />
+            </div>
+          </Card>
+
           <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-            <IntegrationCard i={o.integration} pending={o.pendingCheckouts7d} />
+            <IntegrationCard i={o.integration} pending={o.pendingCheckouts7d} onSaved={overview.reload} />
             <Card>
               <CardHeader title="Últimos pagamentos" description="Confirmados com a InfinitePay (e cortesias)." />
               {o.recentPayments.length === 0 ? (
@@ -314,12 +327,79 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function IntegrationCard({ i, pending }: { i: Overview["integration"]; pending: number }) {
+function HandleForm({ i, onSaved }: { i: Overview["integration"]; onSaved: () => void }) {
+  const toast = useToast();
+  const [value, setValue] = useState(i.handleSource === "painel" ? i.handle ?? "" : "");
+  const [saving, setSaving] = useState(false);
+
+  async function save(handle: string | null) {
+    setSaving(true);
+    try {
+      const r = await api<{ handle: string | null; source: string | null }>("/admin/settings/infinitepay", { method: "PUT", body: { handle } });
+      toast(
+        "success",
+        handle
+          ? `InfiniteTag salva: $${r.handle}`
+          : r.handle
+            ? `Removida do painel. Voltou a usar a do Railway ($${r.handle}).`
+            : "InfiniteTag removida. O cadastro público ficou fechado.",
+      );
+      onSaved();
+    } catch (e) {
+      toast("error", (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      className="mt-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (value.trim()) void save(value.trim());
+      }}
+    >
+      <label htmlFor="infinitetag" className="sr-only">
+        InfiniteTag
+      </label>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-zinc-400">$</span>
+          <Input
+            id="infinitetag"
+            data-testid="infinitetag-input"
+            className="pl-7 font-mono"
+            placeholder="sua-infinitetag"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={65}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </div>
+        <Button type="submit" loading={saving} disabled={!value.trim()}>
+          Salvar
+        </Button>
+      </div>
+      <p className="mt-1.5 text-xs text-zinc-500">
+        É o seu nome de usuário no app da InfinitePay, sem o $. Fica salva no banco do sistema e vale na hora, sem novo deploy.
+      </p>
+      {i.handleSource === "painel" && (
+        <button type="button" disabled={saving} onClick={() => void save(null)} className="mt-1 text-xs font-medium text-red-700 hover:underline disabled:opacity-50">
+          Remover a InfiniteTag do painel
+        </button>
+      )}
+    </form>
+  );
+}
+
+function IntegrationCard({ i, pending, onSaved }: { i: Overview["integration"]; pending: number; onSaved: () => void }) {
   return (
     <Card>
       <CardHeader
         title="InfinitePay"
-        description="Configuração da cobrança. A InfiniteTag é definida na variável INFINITEPAY_HANDLE do Railway."
+        description="Configuração da cobrança. Salve sua InfiniteTag aqui para abrir o cadastro e receber os pagamentos."
         action={
           i.handleConfigured && i.httpsOk ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
@@ -332,14 +412,25 @@ function IntegrationCard({ i, pending }: { i: Overview["integration"]; pending: 
           )
         }
       />
-      <dl className="divide-y divide-zinc-100 px-5">
-        <Row label="InfiniteTag">
+      <div className="border-b border-zinc-100 px-5 py-4">
+        <p className="text-sm font-medium text-zinc-900">InfiniteTag</p>
+        <p className="mt-1 text-sm">
           {i.handle ? (
-            <span className="font-mono">${i.handle}</span>
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-zinc-900" data-testid="infinitetag-current">
+                ${i.handle}
+              </span>
+              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                {i.handleSource === "painel" ? "salva no painel" : "variável INFINITEPAY_HANDLE do Railway"}
+              </span>
+            </span>
           ) : (
-            <span className="text-amber-800">Não definida. O cadastro público está fechado até você criar INFINITEPAY_HANDLE no Railway.</span>
+            <span className="text-amber-800">Não definida. O cadastro público fica fechado até você salvar uma InfiniteTag.</span>
           )}
-        </Row>
+        </p>
+        <HandleForm key={`${i.handleSource}-${i.handle}`} i={i} onSaved={onSaved} />
+      </div>
+      <dl className="divide-y divide-zinc-100 px-5">
         <Row label="Plano">
           {formatMoney(i.plan.priceCents)} a cada {i.plan.days} dias · até {i.plan.maxPlates} QR Codes · {i.plan.graceDays} dias de tolerância
         </Row>

@@ -37,7 +37,7 @@ export function ConfirmDialog({
         if (loading) e.preventDefault();
       }}
       aria-labelledby="confirm-title"
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-xl border border-zinc-200 bg-white p-0 shadow-xl backdrop:bg-zinc-900/40"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-3xl border border-zinc-200 bg-white p-0 shadow-2xl backdrop:bg-black/50 backdrop:backdrop-blur-sm"
     >
       <div className="p-5">
         <h2 id="confirm-title" className="text-base font-semibold text-zinc-900">

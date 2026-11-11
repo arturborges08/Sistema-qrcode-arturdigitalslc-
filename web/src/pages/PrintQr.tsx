@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useForceLight } from "../components/ThemeToggle";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Printer } from "lucide-react";
 import { api } from "../lib/api";
@@ -9,6 +10,7 @@ import { Button, buttonClass, ErrorBox, Spinner } from "../components/ui";
 const SIZES = [4, 5, 6, 7, 8, 9];
 
 export function PrintQrPage() {
+  useForceLight();
   const { id = "" } = useParams();
   const { data: plate, error, loading } = useAsync(() => api<Plate>(`/plates/${id}`), [id]);
   const [cm, setCm] = useState(7);

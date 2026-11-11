@@ -6,24 +6,28 @@
 @theme {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
-  /* Cor da marca (violeta). Usada em botões principais, links e no logo. */
-  --color-brand-50: #f2f1ff;
-  --color-brand-100: #e6e3ff;
-  --color-brand-200: #cfcaff;
-  --color-brand-300: #aea5ff;
-  --color-brand-400: #8a7cfb;
-  --color-brand-500: #6d5af5;
-  --color-brand-600: #5b41ea;
-  --color-brand-700: #4c33cf;
-  --color-brand-800: #3f2ba8;
-  --color-brand-900: #352884;
-  --color-brand-950: #1f174d;
+  /* Cor da marca (violeta). Botões principais, links, destaques e logo. Verde-limão (lime) é o acento de "positivo". */
+  --color-brand-50: #f5f2ff;
+  --color-brand-100: #ebe5ff;
+  --color-brand-200: #d9ceff;
+  --color-brand-300: #bba6ff;
+  --color-brand-400: #9a78ff;
+  --color-brand-500: #7c4dff;
+  --color-brand-600: #6431e8;
+  --color-brand-700: #5225c4;
+  --color-brand-800: #43209d;
+  --color-brand-900: #371c7c;
+  --color-brand-950: #200f4a;
 }
 
 html { -webkit-text-size-adjust: 100%; }
-body { @apply bg-stone-100 text-zinc-900 antialiased; }
+body {
+  @apply bg-stone-100 text-zinc-900 antialiased;
+  background-image: radial-gradient(1100px 520px at 12% -8%, rgb(124 77 255 / 0.08), transparent 65%);
+  background-attachment: fixed;
+}
 
-:focus-visible { @apply outline-2 outline-offset-2 outline-brand-600; }
+:focus-visible { @apply outline-2 outline-offset-2 outline-brand-500; }
 
 /*
  * Modo escuro: em vez de repetir "dark:" em centenas de classes, a paleta é espelhada.
@@ -33,24 +37,24 @@ body { @apply bg-stone-100 text-zinc-900 antialiased; }
 @media screen {
   html.dark {
     color-scheme: dark;
-    --color-white: #18181b;
-    --color-stone-50: #121214;
-    --color-stone-100: #0e0e10;
-    --color-stone-200: #1f1f23;
-    --color-zinc-50: #1f1f24;
-    --color-zinc-100: #27272d;
-    --color-zinc-200: #34343b;
-    --color-zinc-300: #46464f;
-    --color-zinc-400: #7a7a85;
-    --color-zinc-500: #a1a1aa;
-    --color-zinc-600: #b8b8c0;
-    --color-zinc-700: #d4d4d8;
-    --color-zinc-800: #e4e4e7;
-    --color-zinc-900: #f4f4f5;
+    --color-white: #1c1c1f;
+    --color-stone-50: #161618;
+    --color-stone-100: #111113;
+    --color-stone-200: #232327;
+    --color-zinc-50: #242428;
+    --color-zinc-100: #2a2a2f;
+    --color-zinc-200: #36363c;
+    --color-zinc-300: #48484f;
+    --color-zinc-400: #7c7c86;
+    --color-zinc-500: #a3a3ad;
+    --color-zinc-600: #babac2;
+    --color-zinc-700: #d6d6da;
+    --color-zinc-800: #e6e6e9;
+    --color-zinc-900: #f5f5f6;
     --color-zinc-950: #fafafa;
-    --color-red-50: color-mix(in srgb, #7f1d1d 22%, #18181b);
-    --color-red-100: color-mix(in srgb, #7f1d1d 38%, #18181b);
-    --color-red-200: color-mix(in srgb, #991b1b 55%, #18181b);
+    --color-red-50: color-mix(in srgb, #7f1d1d 24%, #1c1c1f);
+    --color-red-100: color-mix(in srgb, #7f1d1d 40%, #1c1c1f);
+    --color-red-200: color-mix(in srgb, #991b1b 55%, #1c1c1f);
     --color-red-300: #b91c1c;
     --color-red-400: #dc2626;
     --color-red-500: #ef4444;
@@ -59,9 +63,9 @@ body { @apply bg-stone-100 text-zinc-900 antialiased; }
     --color-red-800: #fecaca;
     --color-red-900: #fee2e2;
     --color-red-950: #fef2f2;
-    --color-emerald-50: color-mix(in srgb, #064e3b 22%, #18181b);
-    --color-emerald-100: color-mix(in srgb, #064e3b 38%, #18181b);
-    --color-emerald-200: color-mix(in srgb, #065f46 55%, #18181b);
+    --color-emerald-50: color-mix(in srgb, #064e3b 24%, #1c1c1f);
+    --color-emerald-100: color-mix(in srgb, #064e3b 40%, #1c1c1f);
+    --color-emerald-200: color-mix(in srgb, #065f46 55%, #1c1c1f);
     --color-emerald-300: #047857;
     --color-emerald-400: #059669;
     --color-emerald-500: #10b981;
@@ -70,9 +74,9 @@ body { @apply bg-stone-100 text-zinc-900 antialiased; }
     --color-emerald-800: #a7f3d0;
     --color-emerald-900: #d1fae5;
     --color-emerald-950: #ecfdf5;
-    --color-amber-50: color-mix(in srgb, #78350f 22%, #18181b);
-    --color-amber-100: color-mix(in srgb, #78350f 38%, #18181b);
-    --color-amber-200: color-mix(in srgb, #92400e 55%, #18181b);
+    --color-amber-50: color-mix(in srgb, #78350f 24%, #1c1c1f);
+    --color-amber-100: color-mix(in srgb, #78350f 40%, #1c1c1f);
+    --color-amber-200: color-mix(in srgb, #92400e 55%, #1c1c1f);
     --color-amber-300: #b45309;
     --color-amber-400: #d97706;
     --color-amber-500: #f59e0b;
@@ -81,9 +85,9 @@ body { @apply bg-stone-100 text-zinc-900 antialiased; }
     --color-amber-800: #fde68a;
     --color-amber-900: #fef3c7;
     --color-amber-950: #fffbeb;
-    --color-sky-50: color-mix(in srgb, #0c4a6e 22%, #18181b);
-    --color-sky-100: color-mix(in srgb, #0c4a6e 38%, #18181b);
-    --color-sky-200: color-mix(in srgb, #075985 55%, #18181b);
+    --color-sky-50: color-mix(in srgb, #0c4a6e 24%, #1c1c1f);
+    --color-sky-100: color-mix(in srgb, #0c4a6e 40%, #1c1c1f);
+    --color-sky-200: color-mix(in srgb, #075985 55%, #1c1c1f);
     --color-sky-300: #0369a1;
     --color-sky-400: #0284c7;
     --color-sky-500: #0ea5e9;
@@ -92,22 +96,38 @@ body { @apply bg-stone-100 text-zinc-900 antialiased; }
     --color-sky-800: #bae6fd;
     --color-sky-900: #e0f2fe;
     --color-sky-950: #f0f9ff;
-    --color-brand-50: color-mix(in srgb, #352884 22%, #18181b);
-    --color-brand-100: color-mix(in srgb, #352884 38%, #18181b);
-    --color-brand-200: color-mix(in srgb, #3f2ba8 55%, #18181b);
-    --color-brand-300: #4c33cf;
-    --color-brand-400: #5b41ea;
-    --color-brand-500: #6d5af5;
-    --color-brand-600: #8a7cfb;
-    --color-brand-700: #aea5ff;
-    --color-brand-800: #cfcaff;
-    --color-brand-900: #e6e3ff;
-    --color-brand-950: #f2f1ff;
+    --color-lime-50: color-mix(in srgb, #365314 24%, #1c1c1f);
+    --color-lime-100: color-mix(in srgb, #365314 40%, #1c1c1f);
+    --color-lime-200: color-mix(in srgb, #3f6212 55%, #1c1c1f);
+    --color-lime-300: #4d7c0f;
+    --color-lime-400: #65a30d;
+    --color-lime-500: #84cc16;
+    --color-lime-600: #a3e635;
+    --color-lime-700: #bef264;
+    --color-lime-800: #d9f99d;
+    --color-lime-900: #ecfccb;
+    --color-lime-950: #f7fee7;
+    --color-brand-50: color-mix(in srgb, #371c7c 24%, #1c1c1f);
+    --color-brand-100: color-mix(in srgb, #371c7c 40%, #1c1c1f);
+    --color-brand-200: color-mix(in srgb, #43209d 55%, #1c1c1f);
+    --color-brand-300: #5225c4;
+    --color-brand-400: #6431e8;
+    --color-brand-500: #7c4dff;
+    --color-brand-600: #9a78ff;
+    --color-brand-700: #bba6ff;
+    --color-brand-800: #d9ceff;
+    --color-brand-900: #ebe5ff;
+    --color-brand-950: #f5f2ff;
+  }
+  html.dark body {
+    background-image:
+      radial-gradient(900px 520px at 85% -10%, rgb(124 77 255 / 0.22), transparent 60%),
+      radial-gradient(700px 480px at 0% 110%, rgb(163 230 53 / 0.06), transparent 60%);
   }
   /* Imagens de QR Code mantêm fundo branco para continuar legíveis. */
   html.dark .qr-surface { background: #fff; }
 }
 
 @media print {
-  body { background: #fff; }
+  body { background: #fff; background-image: none; }
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useForceLight } from "../components/ThemeToggle";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Printer } from "lucide-react";
 import { api } from "../lib/api";
@@ -9,6 +10,7 @@ import { Button, buttonClass, ErrorBox, Spinner } from "../components/ui";
 const SIZES = [3, 4, 5, 6, 7, 8];
 
 export function BatchPrintPage() {
+  useForceLight();
   const [params] = useSearchParams();
   const name = params.get("nome") ?? "";
   const { data, error, loading } = useAsync(

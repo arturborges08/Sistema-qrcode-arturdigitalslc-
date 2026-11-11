@@ -75,7 +75,7 @@ const SignupSchema = z
 authRouter.post("/signup", signupLimiter, async (req, res, next) => {
   try {
     if (!req.is("application/json")) throw new AppError(415, "Envie os dados como JSON", "unsupported_media_type");
-    if (!planInfo().signupEnabled) throw new AppError(403, "O cadastro está fechado no momento.", "signup_disabled");
+    if (!(await planInfo()).signupEnabled) throw new AppError(403, "O cadastro está fechado no momento.", "signup_disabled");
     const data = SignupSchema.parse(req.body ?? {});
     const user = await prisma.adminUser
       .create({

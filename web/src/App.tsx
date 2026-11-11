@@ -25,6 +25,7 @@ import { SignupPage } from "./pages/Signup";
 import { PlanPage } from "./pages/Plan";
 import { PaymentReturnPage } from "./pages/PaymentReturn";
 import { MyPlateNewPage } from "./pages/client/MyPlateNew";
+import { SubscriptionsPage } from "./pages/Subscriptions";
 
 function RequireAuth() {
   const { status } = useAuth();
@@ -92,6 +93,7 @@ const router = createBrowserRouter([
               { path: "/lotes/novo", element: <BatchNewPage /> },
               { path: "/clientes", element: <ClientsPage /> },
               { path: "/clientes/:id", element: <ClientDetailPage /> },
+              { path: "/assinaturas", element: <SubscriptionsPage /> },
               { path: "/escanear", element: <ScanPage /> },
             ],
           },

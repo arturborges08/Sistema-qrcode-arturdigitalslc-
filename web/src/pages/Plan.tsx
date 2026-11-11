@@ -8,7 +8,7 @@ import type { BillingStatus } from "../lib/types";
 import { useAsync } from "../lib/useAsync";
 import { Button, Card, CardHeader, ErrorBox, PageHeader, Spinner, buttonClass, cx } from "../components/ui";
 
-const METHOD: Record<string, string> = { pix: "Pix", credit_card: "Cartão" };
+const METHOD: Record<string, string> = { pix: "Pix", credit_card: "Cartão", manual: "Cortesia do administrador" };
 
 export function PlanPage() {
   const { refresh } = useAuth();

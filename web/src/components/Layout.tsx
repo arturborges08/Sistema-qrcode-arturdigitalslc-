@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Link } from "react-router-dom";
-import { CalendarClock, CreditCard, Layers, LayoutDashboard, LogOut, QrCode, Plus, ScanLine, UserRound, Users } from "lucide-react";
+import { BadgeDollarSign, CalendarClock, CreditCard, Layers, LayoutDashboard, LogOut, QrCode, Plus, ScanLine, UserRound, Users } from "lucide-react";
 import { useAuth } from "../auth";
 import { daysUntil } from "../lib/format";
 import { buttonClass, cx } from "./ui";
@@ -14,8 +14,11 @@ const ownerNav: NavItem[] = [
   { to: "/plaquinhas", label: "Plaquinhas", short: "Plaquinhas", icon: QrCode, end: false },
   { to: "/lotes", label: "Lotes", short: "Lotes", icon: Layers, end: false },
   { to: "/clientes", label: "Clientes", short: "Clientes", icon: Users, end: false },
+  { to: "/assinaturas", label: "Assinaturas", short: "Assinaturas", icon: BadgeDollarSign, end: false },
   { to: "/escanear", label: "Escanear", short: "Escanear", icon: ScanLine, end: false },
 ];
+// No celular cabem 5 itens; Lotes e Escanear ficam nos botões da Visão geral.
+const ownerMobile = new Set(["/", "/plaquinhas", "/clientes", "/assinaturas"]);
 
 const clientNav: NavItem[] = [
   { to: "/minhas", label: "Minhas plaquinhas", short: "Plaquinhas", icon: QrCode, end: true },
@@ -57,6 +60,7 @@ export function Layout() {
                 key={n.to}
                 to={n.to}
                 end={n.end}
+                title={n.label}
                 className={({ isActive }) =>
                   cx(
                     "flex h-9 items-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm font-medium",
@@ -65,13 +69,14 @@ export function Layout() {
                 }
               >
                 <n.icon className="size-4" aria-hidden />
-                {n.label}
+                <span className={isClient ? undefined : "hidden xl:inline"}>{n.label}</span>
+                {!isClient && <span className="sr-only xl:hidden">{n.label}</span>}
               </NavLink>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-1">
             {!isClient && (
-              <div className="hidden lg:block">
+              <div className="hidden 2xl:block">
                 <Link to="/plaquinhas/nova" className={buttonClass("primary", "sm")}>
                   <Plus className="size-4" aria-hidden />
                   Nova plaquinha
@@ -82,7 +87,7 @@ export function Layout() {
             <div className="hidden md:block">
               <NavLink to="/conta" className={buttonClass("ghost", "sm")} aria-label="Minha conta" title={email ?? ""}>
                 <UserRound className="size-4" aria-hidden />
-                <span className="hidden max-w-48 truncate xl:inline">{email}</span>
+                <span className="hidden max-w-48 truncate 2xl:inline">{email}</span>
               </NavLink>
             </div>
             <button onClick={onLogout} className={buttonClass("ghost", "sm")} aria-label="Sair">
@@ -117,7 +122,7 @@ export function Layout() {
         aria-label="Principal (celular)"
       >
         <ul className="mx-auto flex max-w-md">
-          {[...nav, ...(blocked ? [] : [accountItem])].map((n) => (
+          {[...(isClient ? nav : nav.filter((n) => ownerMobile.has(n.to))), ...(blocked ? [] : [accountItem])].map((n) => (
             <li key={n.to} className="flex-1">
               <NavLink
                 to={n.to}

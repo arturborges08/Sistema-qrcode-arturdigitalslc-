@@ -491,6 +491,34 @@ try {
   await mctx.close();
   await page.evaluate(() => localStorage.removeItem("tema"));
 
+  // ---------- Painel do administrador: Assinaturas ----------
+  const actx = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "pt-BR" });
+  const ap = await actx.newPage();
+  ap.on("pageerror", (e) => consoleErrors.push(e.message));
+  await ap.goto(`${BASE}/login`);
+  await ap.fill("#email", ADMIN.email);
+  await ap.fill("#password", ADMIN.password);
+  await ap.click("button[type=submit]");
+  await ap.getByRole("heading", { name: "Visão geral" }).waitFor();
+  await ap.getByRole("link", { name: "Assinaturas" }).first().click();
+  await ap.getByRole("heading", { name: "Assinaturas" }).waitFor();
+  await ap.getByTestId("subscribers").waitFor();
+  const adminText = await ap.locator("main").innerText();
+  check("painel do admin mostra receita do mês e o assinante", /Recebido este mês[\s\S]*R\$\s\d/.test(adminText) && adminText.includes(signupEmail), "");
+  check("painel do admin mostra a InfiniteTag configurada", adminText.includes("$loja-e2e"));
+  await ap.screenshot({ path: `${SHOTS}/29-admin-assinaturas.png`, fullPage: true });
+  await ap.getByTestId("subscribers").locator("li", { hasText: signupEmail }).getByRole("button", { name: "Dar dias grátis" }).click();
+  await ap.fill("#extend-days", "10");
+  await ap.getByRole("button", { name: "Liberar acesso" }).click();
+  await ap.getByText(/Acesso liberado até/).waitFor();
+  check("admin dá dias grátis a um assinante", true);
+  for (const w of [1280, 1024, 800]) {
+    await ap.setViewportSize({ width: w, height: 900 });
+    const ov = await ap.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    check(`painel do admin sem rolagem lateral em ${w}px`, !ov);
+  }
+  await actx.close();
+
   // 401 (sem sessão), 403 (cliente no painel do dono) e 404 (plaquinha de outro) são provocados de propósito acima.
   const unexpected = consoleErrors.filter((e) => !/status of (401|403|404)\b/.test(e));
   check("nenhum erro no console do navegador (inclui violações de CSP)", unexpected.length === 0, unexpected.join(" | "));

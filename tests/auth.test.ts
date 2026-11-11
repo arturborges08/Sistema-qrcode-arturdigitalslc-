@@ -103,12 +103,25 @@ describe("Login", () => {
     expect(otherIp.status).toBe(200);
   });
 
-  it("não existe rota pública de cadastro de usuário", async () => {
-    for (const p of ["/api/auth/register", "/api/auth/signup", "/api/users"]) {
+  it("cadastro público só cria assinante (nunca administrador)", async () => {
+    for (const p of ["/api/auth/register", "/api/users"]) {
       const r = await request(app).post(p).send({ email: "x@x.com", password: "123456789012" });
       expect([401, 404]).toContain(r.status);
     }
+    // Campos extras como "role" são recusados.
+    const sneaky = await request(app)
+      .post("/api/auth/signup")
+      .set("X-Forwarded-For", nextIp())
+      .send({ name: "X", email: "x@x.com", password: "123456789012", role: "OWNER" });
+    expect(sneaky.status).toBe(400);
     expect(await prisma.adminUser.count()).toBe(1);
+    const ok = await request(app)
+      .post("/api/auth/signup")
+      .set("X-Forwarded-For", nextIp())
+      .send({ name: "X", email: "x@x.com", password: "123456789012" });
+    expect(ok.status).toBe(201);
+    const created = await prisma.adminUser.findUniqueOrThrow({ where: { email: "x@x.com" } });
+    expect(created).toMatchObject({ role: "CLIENT", selfSignup: true, paidUntil: null });
   });
 });
 

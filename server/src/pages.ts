@@ -14,6 +14,10 @@ const PAGES = {
     title: "Plaquinha ainda não ativada",
     body: "Esta plaquinha ainda não foi configurada pelo fornecedor. Tente novamente mais tarde.",
   },
+  planExpired: {
+    title: "Link temporariamente indisponível",
+    body: "O plano desta plaquinha está vencido. Se você é o responsável, entre na sua conta e renove o plano para o link voltar a funcionar na hora.",
+  },
   error: {
     title: "Não foi possível abrir o link",
     body: "Ocorreu um erro temporário. Tente ler o código novamente em alguns instantes.",
@@ -29,6 +33,7 @@ main{max-width:420px;background:#fff;border:1px solid #e4e4e0;border-radius:14px
 .icon{width:44px;height:44px;border-radius:50%;background:#f0efeb;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:22px;color:#6b6b66}
 h1{font-size:19px;margin:0 0 10px;font-weight:600}p{margin:0;color:#5a5a55;line-height:1.55;font-size:15px}
 .admin{display:inline-block;margin-top:22px;font-size:13px;color:#8a8a84}
+@media (prefers-color-scheme:dark){body{background:#0e0e10;color:#f4f4f5}main{background:#18181b;border-color:#34343b}.icon{background:#27272d;color:#a1a1aa}p{color:#b8b8c0}.admin{color:#a1a1aa}}
 `;
 
 /** `adminLoginBack`: caminho interno já validado (só alfanuméricos) para o link "entrar como administrador". */

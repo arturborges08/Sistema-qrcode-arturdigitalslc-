@@ -17,6 +17,26 @@ export interface Plate {
 
 export type Role = "OWNER" | "CLIENT";
 
+export interface Billing {
+  /** true = conta criada pelo cadastro público, paga o plano mensal. */
+  required: boolean;
+  active: boolean;
+  paidUntil: string | null;
+}
+
+export interface PlanInfo {
+  signupEnabled: boolean;
+  priceCents: number;
+  days: number;
+  maxPlates: number;
+  graceDays: number;
+}
+
+export interface BillingStatus extends Billing {
+  plan: PlanInfo;
+  payments: { id: string; amountCents: number; paidAt: string | null; periodEnd: string | null; method: string | null }[];
+}
+
 export interface Client {
   id: string;
   name: string | null;
@@ -25,6 +45,8 @@ export interface Client {
   createdAt: string;
   plates: number;
   configured: number;
+  selfSignup: boolean;
+  paidUntil: string | null;
 }
 
 /** Plaquinha como o cliente revendedor a vê (sem observações internas). */
@@ -43,6 +65,9 @@ export interface MyPlate {
 export interface MyPlateList {
   total: number;
   configured: number;
+  /** Assinante pode criar plaquinhas; cliente do administrador não. */
+  canCreate: boolean;
+  maxPlates: number | null;
   items: MyPlate[];
 }
 

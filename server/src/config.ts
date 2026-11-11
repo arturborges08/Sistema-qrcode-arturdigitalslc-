@@ -26,6 +26,21 @@ const EnvSchema = z.object({
   TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(1),
   ADMIN_EMAIL: optionalNonEmpty,
   ADMIN_PASSWORD: optionalNonEmpty,
+  // Plano mensal (InfinitePay). Sem INFINITEPAY_HANDLE o cadastro público fica fechado.
+  // Handle = sua InfiniteTag sem o "$".
+  INFINITEPAY_HANDLE: optionalNonEmpty.refine((v) => v === undefined || /^[A-Za-z0-9_.-]{1,64}$/.test(v), {
+    message: "INFINITEPAY_HANDLE deve ser a InfiniteTag sem o $ (letras, números, _ . -)",
+  }),
+  INFINITEPAY_API_URL: z
+    .string()
+    .default("https://api.checkout.infinitepay.io")
+    .transform((v) => v.trim().replace(/\/+$/, "")),
+  PLAN_PRICE_CENTS: z.coerce.number().int().min(100).max(1_000_000).default(990),
+  PLAN_DAYS: z.coerce.number().int().min(1).max(366).default(30),
+  // Limite de plaquinhas que um assinante pode criar.
+  PLAN_MAX_PLATES: z.coerce.number().int().min(1).max(10_000).default(20),
+  // Dias de tolerância depois do vencimento antes de os QR Codes do assinante pararem de redirecionar.
+  PLAN_GRACE_DAYS: z.coerce.number().int().min(0).max(60).default(3),
 });
 
 export type Config = z.infer<typeof EnvSchema> & { isProduction: boolean };

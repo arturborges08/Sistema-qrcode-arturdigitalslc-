@@ -23,6 +23,24 @@ O que o cliente **não** consegue: ver plaquinhas de outros ou suas, criar plaqu
 
 No seu painel você vê, no histórico, quem fez cada troca. **Bloquear acesso** desconecta o cliente na hora; **Gerar nova senha** derruba as sessões dele; **Excluir cliente** apaga o acesso e as plaquinhas continuam funcionando, voltando a ser só suas.
 
+## Plano mensal (assinantes) com InfinitePay
+
+Qualquer pessoa pode criar uma conta em `/cadastro` (a página inicial `/inicio` mostra o plano). Essa conta é um **assinante**: só usa o sistema depois de pagar o plano (padrão R$ 9,90 a cada 30 dias) e cria os próprios QR Codes (padrão até 20).
+
+**Isentos:** o administrador e os clientes revendedores cadastrados por ele em **Clientes**.
+
+Como funciona:
+
+1. O assinante toca em **Pagar** na página **Meu plano**. O servidor cria um link no Checkout Integrado da InfinitePay (`POST https://api.checkout.infinitepay.io/links`, com `handle`, preço em centavos e `order_nsu` = id do pagamento).
+2. A pessoa paga por Pix ou cartão na página da InfinitePay e volta para `/pagamento/retorno`.
+3. A liberação acontece de dois jeitos (o que chegar primeiro): pela volta do navegador ou pelo webhook `/api/billing/webhook`. Nos dois casos o servidor **confirma com `POST /payment_check`** antes de liberar, porque o webhook da InfinitePay não tem assinatura.
+4. Cada pagamento soma 30 dias ao vencimento. **Não há cobrança recorrente automática** (o Checkout Integrado não oferece): perto do vencimento o painel avisa e a pessoa paga de novo.
+5. Vencido: o painel fica bloqueado na página do plano. Os QR Codes continuam funcionando por `PLAN_GRACE_DAYS` dias e depois mostram "plano vencido" até a renovação.
+
+Documentação oficial usada: https://www.infinitepay.io/checkout-documentacao
+
+**Ainda não verificado com a InfinitePay real:** o nome do campo da resposta que traz o endereço do link (a documentação não mostra; o código procura `url`, `link`, `checkout_url` e qualquer endereço `*.infinitepay.io`, e registra no log `infinitepay_link_without_url` com os nomes dos campos se não achar).
+
 ## Arquitetura
 
 Um único serviço Node.js:
@@ -125,6 +143,13 @@ Não defina `PORT`: o Railway injeta automaticamente e o servidor a respeita.
 
 > **Atenção ao `APP_BASE_URL`.** É o que fica gravado em cada QR Code e tag NFC. Se você imprimir plaquinhas com o domínio provisório `*.up.railway.app` e depois mudar para o domínio próprio, as plaquinhas antigas continuam apontando para o domínio provisório. Configure o domínio definitivo **antes** de imprimir em produção.
 
+### 2.1 Cobrança do plano (InfinitePay)
+
+1. No app InfinitePay, copie a sua **InfiniteTag** (ex.: `$minhaloja`).
+2. No Railway, serviço da aplicação → **Variables** → **New Variable**: `INFINITEPAY_HANDLE` = a tag **sem o `$`** (ex.: `minhaloja`).
+3. Confira que `APP_BASE_URL` é o endereço público com `https://` (é para lá que a InfinitePay manda o webhook e traz a pessoa de volta).
+4. Faça um pagamento real de teste com uma conta nova em `/cadastro` e confira em **Clientes** que ela aparece como "Assinante · até ...".
+
 ### 3. Primeiro deploy e primeiro administrador
 
 1. Faça o deploy (push no GitHub ou **Deploy** no painel).
@@ -169,3 +194,9 @@ O sistema depende só do PostgreSQL. Ative backups no serviço Postgres do Railw
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | só no 1º deploy | | Cria o primeiro administrador |
 | `SESSION_TTL_HOURS` | não | 12 | Duração da sessão |
 | `TRUST_PROXY` | não | 1 | Proxies reversos à frente do app (Railway = 1), usado para obter o IP real nos limites de requisição |
+| `INFINITEPAY_HANDLE` | para vender o plano | | Sua InfiniteTag **sem o `$`**. Sem ela o cadastro público fica fechado |
+| `PLAN_PRICE_CENTS` | não | 990 | Preço do plano em centavos (990 = R$ 9,90) |
+| `PLAN_DAYS` | não | 30 | Dias de acesso por pagamento |
+| `PLAN_MAX_PLATES` | não | 20 | Quantos QR Codes um assinante pode criar |
+| `PLAN_GRACE_DAYS` | não | 3 | Dias depois do vencimento em que os QR Codes do assinante ainda funcionam |
+| `INFINITEPAY_API_URL` | não | https://api.checkout.infinitepay.io | Só para testes |

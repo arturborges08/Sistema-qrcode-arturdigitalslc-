@@ -1,7 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import type { UserRole } from "@prisma/client";
-import { forbidden, unauthorized } from "../lib/errors.js";
+import { AppError, forbidden, unauthorized } from "../lib/errors.js";
+import { planActive } from "../lib/billing.js";
 import { findSession, sessionCookieName } from "../lib/session.js";
 
 export interface AuthContext {
@@ -11,6 +12,8 @@ export interface AuthContext {
   role: UserRole;
   name: string | null;
   csrfToken: string;
+  selfSignup: boolean;
+  paidUntil: Date | null;
 }
 
 declare module "express-serve-static-core" {
@@ -44,6 +47,8 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       role: s.admin.role,
       name: s.admin.name,
       csrfToken: s.csrfToken,
+      selfSignup: s.admin.selfSignup,
+      paidUntil: s.admin.paidUntil,
     };
     next();
   } catch (e) {
@@ -59,4 +64,13 @@ export function requireOwner(req: Request, _res: Response, next: NextFunction) {
 /** Só clientes revendedores. Usar depois de requireAuth. */
 export function requireClient(req: Request, _res: Response, next: NextFunction) {
   next(req.auth?.role === "CLIENT" ? undefined : forbidden("Esta área é dos clientes"));
+}
+
+/** Assinante (conta criada pelo cadastro público) precisa estar com o plano mensal em dia. Usar depois de requireAuth. */
+export function requireActivePlan(req: Request, _res: Response, next: NextFunction) {
+  next(
+    req.auth && planActive(req.auth)
+      ? undefined
+      : new AppError(402, "Seu plano mensal não está ativo. Pague ou renove para continuar usando.", "payment_required"),
+  );
 }

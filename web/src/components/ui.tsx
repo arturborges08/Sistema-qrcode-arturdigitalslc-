@@ -8,7 +8,7 @@ export function cx(...c: (string | false | null | undefined)[]) {
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-zinc-900 text-white hover:bg-zinc-800 disabled:bg-zinc-400",
+  primary: "bg-brand-600 text-white shadow-sm hover:bg-brand-700 disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none",
   secondary: "bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50 disabled:text-zinc-400",
   ghost: "text-zinc-700 hover:bg-zinc-200/60 disabled:text-zinc-400",
   danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300",
@@ -84,7 +84,7 @@ export function Field({
 }
 
 const inputBase =
-  "block w-full rounded-lg border bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/15 disabled:bg-zinc-50";
+  "block w-full rounded-lg border bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-600/20 disabled:bg-zinc-50";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }>(
   function Input({ className, invalid, ...rest }, ref) {
@@ -93,7 +93,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
         ref={ref}
         aria-invalid={invalid || undefined}
         aria-describedby={invalid && rest.id ? `${rest.id}-error` : undefined}
-        className={cx(inputBase, "h-10", invalid ? "border-red-400 focus:border-red-500" : "border-zinc-300 focus:border-zinc-500", className)}
+        className={cx(inputBase, "h-10", invalid ? "border-red-400 focus:border-red-500" : "border-zinc-300 focus:border-brand-500", className)}
         {...rest}
       />
     );
@@ -101,7 +101,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
 );
 
 export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={cx(inputBase, "border-zinc-300 py-2 focus:border-zinc-500", className)} {...rest} />;
+  return <textarea className={cx(inputBase, "border-zinc-300 py-2 focus:border-brand-500", className)} {...rest} />;
 }
 
 export function StatusBadge({ active }: { active: boolean }) {
@@ -185,7 +185,7 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
         onClick={() => onChange(!checked)}
         className={cx(
           "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50",
-          checked ? "bg-emerald-600" : "bg-zinc-300",
+          checked ? "bg-brand-600" : "bg-zinc-300",
         )}
       >
         <span className={cx("inline-block size-5 rounded-full bg-white shadow transition-transform", checked ? "translate-x-5" : "translate-x-0.5")} />

@@ -38,8 +38,37 @@ await new Promise((resolve, reject) => {
   p.on("exit", (c) => (c === 0 ? resolve() : reject(new Error("set-admin falhou"))));
 });
 
+// InfinitePay simulada (POST /links e /payment_check). Não substitui um pagamento real.
+const IP_PORT = 4502;
+const fakePaid = new Set();
+const fakeIp = http.createServer((req, res) => {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const b = raw ? JSON.parse(raw) : {};
+    res.setHeader("Content-Type", "application/json");
+    if (req.url === "/links") return res.end(JSON.stringify({ url: `https://checkout.infinitepay.io/loja-e2e?pedido=${b.order_nsu}&volta=${encodeURIComponent(b.redirect_url)}` }));
+    if (req.url === "/payment_check") {
+      const paid = fakePaid.has(b.order_nsu);
+      return res.end(JSON.stringify({ success: paid, paid, amount: 990, paid_amount: 990, installments: 1, capture_method: "pix" }));
+    }
+    res.statusCode = 404;
+    res.end("{}");
+  });
+});
+await new Promise((r) => fakeIp.listen(IP_PORT, r));
+
 const app = spawn("node", ["dist/server/index.js"], {
-  env: { ...process.env, NODE_ENV: "development", PORT: String(APP_PORT), APP_BASE_URL: BASE, ADMIN_EMAIL: "", ADMIN_PASSWORD: "" },
+  env: {
+    ...process.env,
+    NODE_ENV: "development",
+    PORT: String(APP_PORT),
+    APP_BASE_URL: BASE,
+    ADMIN_EMAIL: "",
+    ADMIN_PASSWORD: "",
+    INFINITEPAY_HANDLE: "loja-e2e",
+    INFINITEPAY_API_URL: `http://127.0.0.1:${IP_PORT}`,
+  },
   stdio: ["ignore", "ignore", "inherit"],
 });
 for (let i = 0; i < 100; i++) {
@@ -384,8 +413,111 @@ try {
   await page.getByRole("button", { name: "Sair" }).click();
   await page.waitForURL("**/login");
   await page.goto(`${BASE}/`);
-  await page.waitForURL("**/login");
-  check("logout encerra a sessão", true);
+  await page.waitForURL("**/inicio");
+  check("logout encerra a sessão e a raiz mostra a página inicial", true);
+
+  // ---------- Página inicial, cadastro e plano mensal ----------
+  await page.getByRole("heading", { level: 1, name: /Troque o link/ }).waitFor();
+  check("página inicial mostra o preço do plano", /R\$\s9,90/.test(await page.locator("#plano").innerText()));
+  await page.screenshot({ path: `${SHOTS}/21-inicio.png`, fullPage: true });
+  await page.getByRole("link", { name: /Começar por R\$\s9,90/ }).first().click();
+  await page.waitForURL("**/cadastro");
+  const signupEmail = `assinante-${Date.now()}@teste.local`;
+  await page.fill("#name", "Café E2E");
+  await page.fill("#email", signupEmail);
+  await page.fill("#password", "senha-assinante-1");
+  await page.screenshot({ path: `${SHOTS}/22-cadastro.png` });
+  await page.getByRole("button", { name: /Criar conta/ }).click();
+  await page.waitForURL("**/plano");
+  await page.getByTestId("plan-status").waitFor();
+  check("assinante novo cai na página do plano, sem acesso", (await page.getByTestId("plan-status").innerText()).includes("Falta só o pagamento"));
+  await page.goto(`${BASE}/minhas`);
+  await page.waitForURL("**/plano");
+  check("assinante sem pagar não abre as plaquinhas", true);
+  await page.screenshot({ path: `${SHOTS}/23-plano-pendente.png` });
+
+  // Página de pagamento da InfinitePay simulada: "paga" e volta com os parâmetros documentados.
+  await page.route("https://checkout.infinitepay.io/**", async (route) => {
+    const u = new URL(route.request().url());
+    const pedido = u.searchParams.get("pedido");
+    fakePaid.add(pedido);
+    const back = `${u.searchParams.get("volta")}?receipt_url=${encodeURIComponent("https://recibo.infinitepay.io/x")}&order_nsu=${pedido}&slug=slug-e2e&capture_method=pix&transaction_nsu=tx-e2e-${Date.now()}`;
+    await route.fulfill({ status: 302, headers: { Location: back } });
+  });
+  await page.getByRole("button", { name: /Pagar R\$/ }).click();
+  await page.waitForURL("**/pagamento/retorno**");
+  await page.getByRole("heading", { name: "Pagamento confirmado!" }).waitFor();
+  check("volta do pagamento confirma e libera o acesso", true);
+  await page.screenshot({ path: `${SHOTS}/24-pagamento-confirmado.png` });
+  await page.getByRole("link", { name: "Começar a usar" }).click();
+  await page.waitForURL("**/minhas");
+  await page.getByRole("link", { name: "Novo QR Code" }).click();
+  await page.fill("#n-name", "Balcão");
+  await page.fill("#n-url", `http://localhost:${DEST_PORT}/avaliar-cafe`);
+  await page.getByRole("button", { name: "Criar QR Code" }).click();
+  await page.getByRole("heading", { name: "QR Code para imprimir" }).waitFor();
+  const qrOk = await page.locator("img[alt^='QR Code da plaquinha']").evaluate((img) => img.complete && img.naturalWidth > 0);
+  check("assinante cria QR Code e vê a imagem para baixar", qrOk);
+  const subscriberUrl = await page.locator("code").first().innerText();
+  const subVisitor = await browser.newPage();
+  await subVisitor.goto(subscriberUrl);
+  check("QR Code do assinante redireciona para o link", (await subVisitor.content()).includes("DESTINO /avaliar-cafe"));
+  await subVisitor.close();
+  await page.screenshot({ path: `${SHOTS}/25-assinante-qr.png`, fullPage: true });
+
+  // Modo escuro: botão alterna e a escolha fica salva.
+  const bgLight = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.getByTestId("theme-toggle").click(); // sistema -> claro
+  await page.getByTestId("theme-toggle").click(); // claro -> escuro
+  const isDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+  const bgDark = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.reload();
+  await page.getByRole("heading", { name: "QR Code para imprimir" }).waitFor();
+  const stillDark = await page.evaluate(() => document.documentElement.classList.contains("dark") && localStorage.getItem("tema") === "escuro");
+  check("modo escuro troca as cores e fica salvo após recarregar", isDark && stillDark && bgLight !== bgDark, `${bgLight} -> ${bgDark}`);
+  await page.screenshot({ path: `${SHOTS}/26-escuro-detalhe.png`, fullPage: true });
+  await page.goto(`${BASE}/inicio`);
+  await page.getByRole("heading", { level: 1, name: /Troque o link/ }).waitFor();
+  await page.screenshot({ path: `${SHOTS}/27-escuro-inicio.png`, fullPage: true });
+
+  // Celular, modo escuro
+  const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: "pt-BR", colorScheme: "dark" });
+  const mp = await mctx.newPage();
+  await mp.goto(`${BASE}/inicio`);
+  await mp.getByRole("heading", { level: 1, name: /Troque o link/ }).waitFor();
+  const landingOverflow = await mp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  check("página inicial no celular sem rolagem lateral; segue o tema escuro do sistema", !landingOverflow && (await mp.evaluate(() => document.documentElement.classList.contains("dark"))));
+  await mp.screenshot({ path: `${SHOTS}/28-mobile-inicio-escuro.png`, fullPage: true });
+  await mctx.close();
+  await page.evaluate(() => localStorage.removeItem("tema"));
+
+  // ---------- Painel do administrador: Assinaturas ----------
+  const actx = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "pt-BR" });
+  const ap = await actx.newPage();
+  ap.on("pageerror", (e) => consoleErrors.push(e.message));
+  await ap.goto(`${BASE}/login`);
+  await ap.fill("#email", ADMIN.email);
+  await ap.fill("#password", ADMIN.password);
+  await ap.click("button[type=submit]");
+  await ap.getByRole("heading", { name: "Visão geral" }).waitFor();
+  await ap.getByRole("link", { name: "Assinaturas" }).first().click();
+  await ap.getByRole("heading", { name: "Assinaturas" }).waitFor();
+  await ap.getByTestId("subscribers").waitFor();
+  const adminText = await ap.locator("main").innerText();
+  check("painel do admin mostra receita do mês e o assinante", /Recebido este mês[\s\S]*R\$\s\d/.test(adminText) && adminText.includes(signupEmail), "");
+  check("painel do admin mostra a InfiniteTag configurada", adminText.includes("$loja-e2e"));
+  await ap.screenshot({ path: `${SHOTS}/29-admin-assinaturas.png`, fullPage: true });
+  await ap.getByTestId("subscribers").locator("li", { hasText: signupEmail }).getByRole("button", { name: "Dar dias grátis" }).click();
+  await ap.fill("#extend-days", "10");
+  await ap.getByRole("button", { name: "Liberar acesso" }).click();
+  await ap.getByText(/Acesso liberado até/).waitFor();
+  check("admin dá dias grátis a um assinante", true);
+  for (const w of [1280, 1024, 800]) {
+    await ap.setViewportSize({ width: w, height: 900 });
+    const ov = await ap.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    check(`painel do admin sem rolagem lateral em ${w}px`, !ov);
+  }
+  await actx.close();
 
   // 401 (sem sessão), 403 (cliente no painel do dono) e 404 (plaquinha de outro) são provocados de propósito acima.
   const unexpected = consoleErrors.filter((e) => !/status of (401|403|404)\b/.test(e));
@@ -396,6 +528,7 @@ try {
   await browser.close();
   app.kill("SIGTERM");
   dest.close();
+  fakeIp.close();
 }
 
 const failed = results.filter((r) => !r.ok);

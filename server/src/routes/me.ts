@@ -1,19 +1,21 @@
 import { Router } from "express";
-import type { Plate, Prisma } from "@prisma/client";
+import { Prisma, type Plate } from "@prisma/client";
 import { z } from "zod";
-import { permanentUrl } from "../config.js";
+import { config, permanentUrl } from "../config.js";
 import { prisma } from "../db.js";
-import { notFound } from "../lib/errors.js";
+import { generateCode } from "../lib/code.js";
+import { AppError, notFound } from "../lib/errors.js";
+import { PNG_SIZES, qrPng, qrSvg } from "../lib/qr.js";
 import { destinationUrlSchema } from "../lib/url.js";
-import { requireAuth, requireClient } from "../middleware/auth.js";
-import { historyItems } from "./plates.js";
+import { requireActivePlan, requireAuth, requireClient } from "../middleware/auth.js";
+import { fileBase, historyItems } from "./plates.js";
 
 /**
  * Área do cliente revendedor: só as plaquinhas atribuídas a ele, e só o link e o nome do negócio podem mudar.
  * Plaquinha de outra pessoa responde 404, igual a uma inexistente, para não revelar que ela existe.
  */
 export const meRouter = Router();
-meRouter.use(requireAuth, requireClient);
+meRouter.use(requireAuth, requireClient, requireActivePlan);
 
 const UpdateSchema = z
   .object({
@@ -73,7 +75,9 @@ meRouter.get("/plates", async (req, res, next) => {
       prisma.plate.count({ where: { clientId: req.auth!.adminId, destinationUrl: { not: null } } }),
       prisma.plate.findMany({ where, orderBy: [{ updatedAt: "desc" }], take: 500 }),
     ]);
-    res.json({ total, configured, items: items.map(toDto) });
+    // Assinantes (cadastro público) criam as próprias plaquinhas; clientes do administrador recebem as dele.
+    const canCreate = req.auth!.selfSignup;
+    res.json({ total, configured, canCreate, maxPlates: canCreate ? config().PLAN_MAX_PLATES : null, items: items.map(toDto) });
   } catch (e) {
     next(e);
   }
@@ -134,6 +138,80 @@ meRouter.get("/plates/:id/history", async (req, res, next) => {
       h.changedBy?.role === "OWNER" ? { ...h, changedBy: { name: "Administrador", email: null, role: "OWNER" as const } } : h,
     );
     res.json({ items });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const CreateSchema = z
+  .object({
+    businessName: z.string({ error: "Informe o nome do negócio" }).trim().min(1, "Informe o nome do negócio").max(120, "O nome deve ter no máximo 120 caracteres"),
+    destinationUrl: destinationUrlSchema,
+  })
+  .strict();
+
+// Só assinantes: cria uma plaquinha nova na própria conta, até o limite do plano.
+meRouter.post("/plates", async (req, res, next) => {
+  try {
+    if (!req.auth!.selfSignup) throw new AppError(403, "Peça novas plaquinhas ao seu fornecedor.", "forbidden");
+    const data = CreateSchema.parse(req.body ?? {});
+    const clientId = req.auth!.adminId;
+    const max = config().PLAN_MAX_PLATES;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const plate = await prisma.$transaction(async (tx) => {
+          // Trava a conta para que duas criações simultâneas não passem do limite.
+          await tx.$queryRaw`SELECT id FROM admin_users WHERE id = ${clientId}::uuid FOR UPDATE`;
+          const count = await tx.plate.count({ where: { clientId } });
+          if (count >= max) throw new AppError(400, `Seu plano permite até ${max} plaquinhas.`, "plan_limit");
+          const created = await tx.plate.create({
+            data: { code: generateCode(), businessName: data.businessName, internalName: data.businessName, destinationUrl: data.destinationUrl, clientId },
+          });
+          await tx.destinationChange.create({
+            data: { plateId: created.id, previousUrl: null, newUrl: data.destinationUrl, changedById: clientId },
+          });
+          return created;
+        });
+        res.status(201).json(toDto(plate));
+        return;
+      } catch (e) {
+        const isCodeCollision =
+          e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && JSON.stringify(e.meta?.target ?? "").includes("code");
+        if (!isCodeCollision) throw e;
+      }
+    }
+    throw new Error("Não foi possível gerar um identificador único");
+  } catch (e) {
+    next(e);
+  }
+});
+
+const QrQuery = z.object({
+  size: z.enum(["screen", "print"]).default("screen"),
+  download: z.enum(["0", "1"]).default("0"),
+});
+
+meRouter.get("/plates/:id/qr.svg", async (req, res, next) => {
+  try {
+    const { id } = IdParam.parse(req.params);
+    const { download } = QrQuery.parse(req.query);
+    const plate = await ownPlateOr404(req.auth!.adminId, { id });
+    res.type("image/svg+xml").set("Cache-Control", "private, no-store");
+    if (download === "1") res.attachment(`${fileBase(plate)}.svg`);
+    res.send(await qrSvg(permanentUrl(plate.code)));
+  } catch (e) {
+    next(e);
+  }
+});
+
+meRouter.get("/plates/:id/qr.png", async (req, res, next) => {
+  try {
+    const { id } = IdParam.parse(req.params);
+    const { size, download } = QrQuery.parse(req.query);
+    const plate = await ownPlateOr404(req.auth!.adminId, { id });
+    res.type("image/png").set("Cache-Control", "private, no-store");
+    if (download === "1") res.attachment(`${fileBase(plate)}-${PNG_SIZES[size]}px.png`);
+    res.send(await qrPng(permanentUrl(plate.code), PNG_SIZES[size]));
   } catch (e) {
     next(e);
   }

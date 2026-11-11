@@ -1,12 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, ApiError, setCsrfToken } from "./lib/api";
-import type { Role } from "./lib/types";
+import type { Billing, Role } from "./lib/types";
 
 interface Session {
   email: string;
   role: Role;
   name: string | null;
   csrfToken: string;
+  selfSignup: boolean;
+  billing: Billing;
 }
 
 interface AuthState {
@@ -14,38 +16,62 @@ interface AuthState {
   email: string | null;
   role: Role | null;
   name: string | null;
+  selfSignup: boolean;
+  billing: Billing | null;
   login: (email: string, password: string) => Promise<void>;
+  signup: (data: { name: string; email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
+  /** Recarrega a sessão (ex.: depois de um pagamento confirmado). */
+  refresh: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthState["status"]>("loading");
-  const [email, setEmail] = useState<string | null>(null);
-  const [role, setRole] = useState<Role | null>(null);
-  const [name, setName] = useState<string | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
 
   const apply = useCallback((s: Session | null) => {
     setCsrfToken(s?.csrfToken ?? null);
-    setEmail(s?.email ?? null);
-    setRole(s?.role ?? null);
-    setName(s?.name ?? null);
+    setSession(s);
     setStatus(s ? "authenticated" : "anonymous");
   }, []);
+
+  const refresh = useCallback(async () => {
+    try {
+      apply(await api<Session>("/auth/session"));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) apply(null);
+      else if (!(err instanceof ApiError)) apply(null);
+      else throw err;
+    }
+  }, [apply]);
 
   useEffect(() => {
     api<Session>("/auth/session")
       .then(apply)
       .catch(() => apply(null));
     const onExpired = () => apply(null);
+    // A API respondeu "plano vencido": atualiza a sessão para o app levar à página do plano.
+    const onPayment = () => void refresh().catch(() => undefined);
     window.addEventListener("auth:expired", onExpired);
-    return () => window.removeEventListener("auth:expired", onExpired);
-  }, [apply]);
+    window.addEventListener("billing:required", onPayment);
+    return () => {
+      window.removeEventListener("auth:expired", onExpired);
+      window.removeEventListener("billing:required", onPayment);
+    };
+  }, [apply, refresh]);
 
   const login = useCallback(
     async (e: string, password: string) => {
       apply(await api<Session>("/auth/login", { method: "POST", body: { email: e, password } }));
+    },
+    [apply],
+  );
+
+  const signup = useCallback(
+    async (data: { name: string; email: string; password: string }) => {
+      apply(await api<Session>("/auth/signup", { method: "POST", body: data }));
     },
     [apply],
   );
@@ -59,7 +85,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     apply(null);
   }, [apply]);
 
-  return <Ctx.Provider value={{ status, email, role, name, login, logout }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider
+      value={{
+        status,
+        email: session?.email ?? null,
+        role: session?.role ?? null,
+        name: session?.name ?? null,
+        selfSignup: session?.selfSignup ?? false,
+        billing: session?.billing ?? null,
+        login,
+        signup,
+        logout,
+        refresh,
+      }}
+    >
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useAuth() {

@@ -332,7 +332,7 @@ export async function historyItems(plateId: string) {
   }));
 }
 
-function fileBase(p: Plate) {
+export function fileBase(p: Plate) {
   const slug = (p.businessName ?? p.batchName ?? "plaquinha")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

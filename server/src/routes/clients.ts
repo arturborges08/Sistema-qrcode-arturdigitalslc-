@@ -38,7 +38,7 @@ const AssignSchema = z
   .refine((v) => Boolean(v.batchName) !== Boolean(v.plateIds), { message: "Informe um lote ou uma lista de plaquinhas" });
 const IdParam = z.object({ id: z.uuid("Identificador inválido") });
 
-type ClientRow = { id: string; name: string | null; email: string; active: boolean; createdAt: Date };
+type ClientRow = { id: string; name: string | null; email: string; active: boolean; createdAt: Date; selfSignup: boolean; paidUntil: Date | null };
 
 async function counts(ids: string[]) {
   const [all, configured] = await Promise.all([
@@ -51,10 +51,20 @@ async function counts(ids: string[]) {
 }
 
 function toDto(c: ClientRow, n: { plates: number; configured: number }) {
-  return { id: c.id, name: c.name, email: c.email, active: c.active, createdAt: c.createdAt.toISOString(), ...n };
+  return {
+    id: c.id,
+    name: c.name,
+    email: c.email,
+    active: c.active,
+    createdAt: c.createdAt.toISOString(),
+    // Assinante = criou a conta sozinho e paga o plano mensal.
+    selfSignup: c.selfSignup,
+    paidUntil: c.paidUntil ? c.paidUntil.toISOString() : null,
+    ...n,
+  };
 }
 
-const select = { id: true, name: true, email: true, active: true, createdAt: true } as const;
+const select = { id: true, name: true, email: true, active: true, createdAt: true, selfSignup: true, paidUntil: true } as const;
 
 async function getClientOr404(id: string) {
   const c = await prisma.adminUser.findFirst({ where: { id, role: "CLIENT" }, select });

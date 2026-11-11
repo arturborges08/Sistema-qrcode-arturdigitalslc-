@@ -2,6 +2,7 @@ import request from "supertest";
 import { createApp } from "../server/src/app.js";
 import { upsertAdmin } from "../server/src/admin.js";
 import { prisma } from "../server/src/db.js";
+import { clearSettingsCache } from "../server/src/lib/settings.js";
 
 export const ADMIN = { email: "admin@teste.local", password: "senha-de-teste-forte-123" };
 export const app = createApp({ webDir: "/nao-existe" });
@@ -15,6 +16,8 @@ export async function resetData() {
   await prisma.plate.deleteMany();
   await prisma.session.deleteMany();
   await prisma.adminUser.deleteMany();
+  await prisma.appSetting.deleteMany();
+  clearSettingsCache();
   await upsertAdmin(ADMIN.email, ADMIN.password);
 }
 

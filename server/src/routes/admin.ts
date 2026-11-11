@@ -7,6 +7,9 @@ import { planInfo } from "../lib/billing.js";
 import { notFound } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { requireAuth, requireOwner } from "../middleware/auth.js";
+import { AppError } from "../lib/errors.js";
+import { HANDLE_PATTERN, setInfinitePayHandle } from "../lib/settings.js";
+import { getInfinitePayHandle } from "../lib/settings.js";
 
 /**
  * Painel do dono do sistema: assinantes do plano mensal, pagamentos e estado da integração com a InfinitePay.
@@ -49,10 +52,26 @@ adminRouter.get("/overview", async (_req, res, next) => {
         include: { user: { select: { id: true, name: true, email: true } } },
       }),
     ]);
+    // Receita por dia nos últimos 30 dias (datas no fuso de São Paulo), para o gráfico.
+    const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+    const since = new Date(now.getTime() - 29 * DAY);
+    const recentPaid = await prisma.payment.findMany({
+      where: { ...paidReal, paidAt: { gte: new Date(since.getTime() - DAY) } },
+      select: { paidAt: true, amountCents: true },
+    });
+    const buckets = new Map<string, number>();
+    for (let i = 0; i < 30; i++) buckets.set(dayKey.format(new Date(since.getTime() + i * DAY)), 0);
+    for (const p of recentPaid) {
+      const k = dayKey.format(p.paidAt!);
+      if (buckets.has(k)) buckets.set(k, buckets.get(k)! + p.amountCents);
+    }
+    const daily = [...buckets].map(([date, cents]) => ({ date, cents }));
+
     const expiringSoon = await prisma.adminUser.count({
       where: { ...subscriberWhere, paidUntil: { gt: now, lte: new Date(now.getTime() + 7 * DAY) } },
     });
     const cfg = config();
+    const hp = await getInfinitePayHandle();
     res.json({
       subscribers: { total, active, expired: total - active - neverPaid, neverPaid, expiringSoon },
       revenue: {
@@ -66,18 +85,21 @@ adminRouter.get("/overview", async (_req, res, next) => {
         monthStart: monthStart.toISOString(),
       },
       pendingCheckouts7d: pending,
+      daily,
       recentPayments: recent.map(paymentDto),
       integration: {
         provider: "InfinitePay (Checkout Integrado)",
-        handleConfigured: Boolean(cfg.INFINITEPAY_HANDLE),
+        handleConfigured: Boolean(hp.handle),
+        // "painel" = salva aqui no painel; "variavel" = vem de INFINITEPAY_HANDLE no Railway.
+        handleSource: hp.source,
         // A InfiniteTag é pública (aparece no link de pagamento), então pode ser mostrada.
-        handle: cfg.INFINITEPAY_HANDLE ?? null,
+        handle: hp.handle,
         apiUrl: cfg.INFINITEPAY_API_URL,
         webhookUrl: `${cfg.APP_BASE_URL}/api/billing/webhook`,
         redirectUrl: `${cfg.APP_BASE_URL}/pagamento/retorno`,
         httpsOk: cfg.APP_BASE_URL.startsWith("https://"),
         lastConfirmedPaymentAt: lastPaid?.paidAt?.toISOString() ?? null,
-        plan: planInfo(),
+        plan: await planInfo(),
       },
     });
   } catch (e) {
@@ -230,6 +252,33 @@ adminRouter.get("/payments", async (req, res, next) => {
       }),
     ]);
     res.json({ total, page, pageSize, items: items.map(paymentDto) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const HandleSchema = z
+  .object({
+    handle: z
+      .string()
+      .trim()
+      .max(65)
+      .transform((v) => v.replace(/^\$/, ""))
+      .nullable(),
+  })
+  .strict();
+
+// Salva (ou apaga, com handle vazio) a InfiniteTag usada para criar as cobranças.
+adminRouter.put("/settings/infinitepay", async (req, res, next) => {
+  try {
+    const { handle } = HandleSchema.parse(req.body ?? {});
+    const value = handle ? handle : null;
+    if (value && !HANDLE_PATTERN.test(value)) {
+      throw new AppError(400, "InfiniteTag inválida. Use só letras, números, ponto, hífen ou sublinhado (sem espaços).", "validation_error");
+    }
+    await setInfinitePayHandle(value);
+    logger.info("admin_infinitepay_handle_saved", { cleared: value === null });
+    res.json(await getInfinitePayHandle());
   } catch (e) {
     next(e);
   }

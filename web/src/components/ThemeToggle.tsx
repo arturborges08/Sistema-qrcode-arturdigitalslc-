@@ -44,7 +44,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     <button
       type="button"
       onClick={() => setTheme(next)}
-      className={cx("inline-flex size-9 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900", className)}
+      className={cx("inline-flex size-10 items-center justify-center rounded-xl", className ?? "text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900")}
       aria-label={`${LABEL[theme]}. Tocar para mudar para ${LABEL[next].toLowerCase()}`}
       title={`${LABEL[theme]} (tocar para trocar)`}
       data-testid="theme-toggle"
@@ -52,4 +52,16 @@ export function ThemeToggle({ className }: { className?: string }) {
       <Icon className="size-4" aria-hidden />
     </button>
   );
+}
+
+/** Folhas de impressão ficam sempre no modo claro, também na tela (o que se vê é o que sai na impressora). */
+export function useForceLight() {
+  useEffect(() => {
+    const root = document.documentElement;
+    const wasDark = root.classList.contains("dark");
+    root.classList.remove("dark");
+    return () => {
+      if (wasDark) root.classList.add("dark");
+    };
+  }, []);
 }

@@ -6,14 +6,19 @@ import { billingDto, billingRequired, confirmPayment, planInfo } from "../lib/bi
 import { AppError } from "../lib/errors.js";
 import { createCheckoutLink, InfinitePayError } from "../lib/infinitepay.js";
 import { logger } from "../lib/logger.js";
+import { getInfinitePayHandle } from "../lib/settings.js";
 import { requireAuth } from "../middleware/auth.js";
 import { billingLimiter } from "../middleware/rateLimit.js";
 
 export const billingRouter = Router();
 
 // Público: preço e se o cadastro está aberto (usado na página inicial e no cadastro).
-billingRouter.get("/plan", (_req, res) => {
-  res.json(planInfo());
+billingRouter.get("/plan", async (_req, res, next) => {
+  try {
+    res.json(await planInfo());
+  } catch (e) {
+    next(e);
+  }
 });
 
 billingRouter.get("/status", requireAuth, async (req, res, next) => {
@@ -28,7 +33,7 @@ billingRouter.get("/status", requireAuth, async (req, res, next) => {
       : [];
     res.json({
       ...billingDto(req.auth!),
-      plan: planInfo(),
+      plan: await planInfo(),
       payments: payments.map((p) => ({
         id: p.id,
         amountCents: p.amountCents,
@@ -49,7 +54,7 @@ billingRouter.post("/checkout", billingLimiter, requireAuth, async (req, res, ne
   try {
     if (!billingRequired(req.auth!)) throw new AppError(400, "Sua conta é isenta do plano mensal.", "billing_not_required");
     const cfg = config();
-    if (!cfg.INFINITEPAY_HANDLE) throw new AppError(503, "O pagamento ainda não foi configurado pelo administrador.", "billing_not_configured");
+    if (!(await getInfinitePayHandle()).handle) throw new AppError(503, "O pagamento ainda não foi configurado pelo administrador.", "billing_not_configured");
 
     const recent = await prisma.payment.findFirst({
       where: {

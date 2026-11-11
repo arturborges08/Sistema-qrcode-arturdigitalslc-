@@ -383,7 +383,7 @@ function QrCard({ plate }: { plate: Plate }) {
     <Card>
       <CardHeader title="QR Code" description={`${plate.businessName ?? "Sem nome"} · ${plate.internalName}`} />
       <div className="space-y-4 p-5">
-        <div className="mx-auto max-w-64 rounded-lg border border-zinc-200 bg-white p-2">
+        <div className="qr-surface mx-auto max-w-64 rounded-2xl border border-zinc-200 bg-white p-2">
           <img src={`${base}/qr.svg`} alt={`QR Code do endereço ${plate.permanentUrl}`} className="aspect-square w-full" width={256} height={256} />
         </div>
         <p className="text-center font-mono text-xs text-zinc-500">Código: {plate.code}</p>

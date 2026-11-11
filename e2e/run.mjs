@@ -407,7 +407,12 @@ try {
   await page.goto(`${BASE}/plaquinhas/${cTarget.id}`);
   await page.getByTestId("changed-by").first().waitFor();
   check("dono vê no histórico que o cliente trocou o link", (await page.getByTestId("changed-by").first().innerText()).includes("Revenda E2E (cliente)"));
-  check("dono vê o cliente na plaquinha", (await page.inputValue("#plate-client")) !== "");
+  // A lista de clientes carrega depois da plaquinha: espera o campo ser preenchido em vez de ler na hora.
+  const clientShown = await page
+    .waitForFunction(() => document.querySelector("#plate-client")?.value, null, { timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  check("dono vê o cliente na plaquinha", clientShown);
 
   // Logout
   await page.getByRole("button", { name: "Sair" }).click();
@@ -467,8 +472,10 @@ try {
 
   // Modo escuro: botão alterna e a escolha fica salva.
   const bgLight = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  await page.getByTestId("theme-toggle").click(); // sistema -> claro
-  await page.getByTestId("theme-toggle").click(); // claro -> escuro
+  // Há um botão no menu lateral e outro no topo do celular; clica no que está visível.
+  const toggle = page.getByTestId("theme-toggle").locator("visible=true");
+  await toggle.click(); // sistema -> claro
+  await toggle.click(); // claro -> escuro
   const isDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
   const bgDark = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   await page.reload();
@@ -507,6 +514,19 @@ try {
   check("painel do admin mostra receita do mês e o assinante", /Recebido este mês[\s\S]*R\$\s\d/.test(adminText) && adminText.includes(signupEmail), "");
   check("painel do admin mostra a InfiniteTag configurada", adminText.includes("$loja-e2e"));
   await ap.screenshot({ path: `${SHOTS}/29-admin-assinaturas.png`, fullPage: true });
+
+  // InfiniteTag salva pelo painel: vale na hora e pode voltar para a variável.
+  await ap.fill("#infinitetag", "$loja-painel");
+  await ap.getByRole("button", { name: "Salvar", exact: true }).click();
+  await ap.getByText("InfiniteTag salva: $loja-painel").waitFor();
+  await ap.getByTestId("infinitetag-current").filter({ hasText: "$loja-painel" }).waitFor();
+  const savedText = await ap.locator("main").innerText();
+  const planAfter = await (await ap.request.get(`${BASE}/api/billing/plan`)).json();
+  await ap.screenshot({ path: `${SHOTS}/30-admin-infinitetag-salva.png`, fullPage: true });
+  check("admin salva a InfiniteTag pelo painel e o cadastro continua aberto",savedText.includes("salva no painel") && planAfter.signupEnabled === true);
+  await ap.getByRole("button", { name: "Remover a InfiniteTag do painel" }).click();
+  await ap.getByTestId("infinitetag-current").filter({ hasText: "$loja-e2e" }).waitFor();
+  check("remover do painel volta a usar a variável do Railway", (await ap.locator("main").innerText()).includes("variável INFINITEPAY_HANDLE"));
   await ap.getByTestId("subscribers").locator("li", { hasText: signupEmail }).getByRole("button", { name: "Dar dias grátis" }).click();
   await ap.fill("#extend-days", "10");
   await ap.getByRole("button", { name: "Liberar acesso" }).click();

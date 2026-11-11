@@ -9,7 +9,7 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 
 const variants: Record<Variant, string> = {
   primary: "bg-brand-600 text-white shadow-sm hover:bg-brand-700 disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none",
-  secondary: "bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50 disabled:text-zinc-400",
+  secondary: "bg-white text-zinc-900 border border-zinc-200 shadow-sm hover:bg-zinc-50 disabled:text-zinc-400",
   ghost: "text-zinc-700 hover:bg-zinc-200/60 disabled:text-zinc-400",
   danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300",
 };
@@ -23,8 +23,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 export const buttonClass = (variant: Variant = "secondary", size: "sm" | "md" = "md") =>
   cx(
-    "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:cursor-not-allowed whitespace-nowrap",
-    size === "sm" ? "h-8 px-3 text-sm" : "h-10 px-4 text-sm",
+    "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors disabled:cursor-not-allowed whitespace-nowrap",
+    size === "sm" ? "h-9 px-3.5 text-sm" : "h-11 px-5 text-sm",
     variants[variant],
   );
 
@@ -38,14 +38,14 @@ export function Button({ variant = "secondary", size = "md", loading, icon, chil
 }
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <section className={cx("rounded-xl border border-zinc-200 bg-white", className)}>{children}</section>;
+  return <section className={cx("rounded-3xl border border-zinc-200/80 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.04)]", className)}>{children}</section>;
 }
 
 export function CardHeader({ title, description, action }: { title: string; description?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-100 px-5 py-4">
+    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-100 px-6 py-5">
       <div className="min-w-0">
-        <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
+        <h2 className="text-base font-semibold text-zinc-900">{title}</h2>
         {description && <p className="mt-0.5 text-sm text-zinc-500">{description}</p>}
       </div>
       {action}
@@ -84,7 +84,7 @@ export function Field({
 }
 
 const inputBase =
-  "block w-full rounded-lg border bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-600/20 disabled:bg-zinc-50";
+  "block w-full rounded-xl border bg-white px-3.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-600/20 disabled:bg-zinc-50";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }>(
   function Input({ className, invalid, ...rest }, ref) {
@@ -93,7 +93,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
         ref={ref}
         aria-invalid={invalid || undefined}
         aria-describedby={invalid && rest.id ? `${rest.id}-error` : undefined}
-        className={cx(inputBase, "h-10", invalid ? "border-red-400 focus:border-red-500" : "border-zinc-300 focus:border-brand-500", className)}
+        className={cx(inputBase, "h-11", invalid ? "border-red-400 focus:border-red-500" : "border-zinc-300 focus:border-brand-500", className)}
         {...rest}
       />
     );
@@ -139,7 +139,7 @@ export function Spinner({ label = "Carregando…" }: { label?: string }) {
 export function EmptyState({ icon, title, description, action }: { icon: ReactNode; title: string; description?: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center px-6 py-14 text-center">
-      <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-zinc-100 text-zinc-500">{icon}</div>
+      <div className="mb-3 flex size-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">{icon}</div>
       <p className="font-medium text-zinc-900">{title}</p>
       {description && <p className="mt-1 max-w-sm text-sm text-zinc-500">{description}</p>}
       {action && <div className="mt-5">{action}</div>}
@@ -149,7 +149,7 @@ export function EmptyState({ icon, title, description, action }: { icon: ReactNo
 
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800" role="alert">
+    <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800" role="alert">
       <p>{message}</p>
       {onRetry && (
         <button onClick={onRetry} className="mt-2 font-medium underline underline-offset-2">
@@ -162,9 +162,9 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
 
 export function PageHeader({ title, description, actions }: { title: ReactNode; description?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">{title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 sm:text-[32px] sm:leading-tight">{title}</h1>
         {description && <div className="mt-1 text-sm text-zinc-500">{description}</div>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}

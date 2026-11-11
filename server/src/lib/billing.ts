@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import { prisma } from "../db.js";
 import { logger } from "./logger.js";
 import { checkPayment } from "./infinitepay.js";
+import { getInfinitePayHandle } from "./settings.js";
 
 const DAY = 24 * 3600 * 1000;
 
@@ -30,10 +31,11 @@ export function billingDto(u: BillingUser) {
   };
 }
 
-export function planInfo() {
+export async function planInfo() {
   const c = config();
+  const { handle } = await getInfinitePayHandle();
   return {
-    signupEnabled: Boolean(c.INFINITEPAY_HANDLE),
+    signupEnabled: Boolean(handle),
     priceCents: c.PLAN_PRICE_CENTS,
     days: c.PLAN_DAYS,
     maxPlates: c.PLAN_MAX_PLATES,

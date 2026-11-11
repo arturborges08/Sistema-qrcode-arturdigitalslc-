@@ -77,7 +77,7 @@ async function payViaWebhook(orderNsu: string) {
 describe("Plano mensal (InfinitePay)", () => {
   it("informa o plano publicamente", async () => {
     const r = await request(app).get("/api/billing/plan");
-    expect(r.body).toEqual({ signupEnabled: true, priceCents: 990, days: 30, maxPlates: 20 });
+    expect(r.body).toEqual({ signupEnabled: true, priceCents: 990, days: 30, maxPlates: 20, graceDays: 3 });
   });
 
   it("cadastro público cria assinante bloqueado até pagar", async () => {

@@ -24,3 +24,9 @@ export function shortUrl(url: string, max = 60) {
   const s = url.replace(/^https?:\/\//, "");
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
+
+const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+export const formatMoney = (cents: number) => money.format(cents / 100);
+
+/** Dias inteiros até a data (negativo = já passou). */
+export const daysUntil = (iso: string) => Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);

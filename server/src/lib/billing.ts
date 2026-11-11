@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { config } from "../config.js";
 import { prisma } from "../db.js";
 import { logger } from "./logger.js";
@@ -36,6 +37,7 @@ export function planInfo() {
     priceCents: c.PLAN_PRICE_CENTS,
     days: c.PLAN_DAYS,
     maxPlates: c.PLAN_MAX_PLATES,
+    graceDays: c.PLAN_GRACE_DAYS,
   };
 }
 
@@ -62,28 +64,37 @@ export async function confirmPayment(input: {
     return "amount_mismatch";
   }
 
-  return prisma.$transaction(async (tx) => {
-    // Trava o pagamento para que webhook e retorno simultâneos não somem o mês duas vezes.
-    const rows = await tx.$queryRaw<{ status: string }[]>`SELECT status FROM payments WHERE id = ${payment.id}::uuid FOR UPDATE`;
-    if (rows[0]?.status === "PAID") return "already_paid" as const;
-    const user = await tx.adminUser.findUniqueOrThrow({ where: { id: payment.userId }, select: { paidUntil: true } });
-    const now = Date.now();
-    const base = user.paidUntil && user.paidUntil.getTime() > now ? user.paidUntil.getTime() : now;
-    const periodEnd = new Date(base + config().PLAN_DAYS * DAY);
-    await tx.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: "PAID",
-        paidAt: new Date(now),
-        transactionNsu: input.transactionNsu,
-        invoiceSlug: input.slug,
-        captureMethod: check.captureMethod,
-        paidAmountCents: check.paidAmountCents,
-        periodEnd,
-      },
+  return prisma
+    .$transaction(async (tx) => {
+      // Trava o pagamento para que webhook e retorno simultâneos não somem o mês duas vezes.
+      const rows = await tx.$queryRaw<{ status: string }[]>`SELECT status FROM payments WHERE id = ${payment.id}::uuid FOR UPDATE`;
+      if (rows[0]?.status === "PAID") return "already_paid" as const;
+      const user = await tx.adminUser.findUniqueOrThrow({ where: { id: payment.userId }, select: { paidUntil: true } });
+      const now = Date.now();
+      const base = user.paidUntil && user.paidUntil.getTime() > now ? user.paidUntil.getTime() : now;
+      const periodEnd = new Date(base + config().PLAN_DAYS * DAY);
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: "PAID",
+          paidAt: new Date(now),
+          transactionNsu: input.transactionNsu,
+          invoiceSlug: input.slug,
+          captureMethod: check.captureMethod,
+          paidAmountCents: check.paidAmountCents,
+          periodEnd,
+        },
+      });
+      await tx.adminUser.update({ where: { id: payment.userId }, data: { paidUntil: periodEnd } });
+      logger.info("payment_confirmed", { paymentId: payment.id, periodEnd: periodEnd.toISOString() });
+      return "paid" as const;
+    })
+    .catch((e): ConfirmOutcome => {
+      // A mesma transação da InfinitePay já liberou outro pedido: não conta duas vezes.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        logger.error("payment_transaction_reused", { paymentId: payment.id });
+        return "unknown_order";
+      }
+      throw e;
     });
-    await tx.adminUser.update({ where: { id: payment.userId }, data: { paidUntil: periodEnd } });
-    logger.info("payment_confirmed", { paymentId: payment.id, periodEnd: periodEnd.toISOString() });
-    return "paid" as const;
-  });
 }

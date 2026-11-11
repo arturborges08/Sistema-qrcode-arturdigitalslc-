@@ -1,3 +1,4 @@
+import { formatDate } from "../lib/format";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight, KeyRound, UserPlus, Users } from "lucide-react";
@@ -52,6 +53,20 @@ export function ClientsPage() {
                         {c.email} · {c.plates} {c.plates === 1 ? "plaquinha" : "plaquinhas"} · {c.configured} com link
                       </p>
                     </div>
+                    {c.selfSignup && (
+                      <span
+                        className={
+                          c.paidUntil && new Date(c.paidUntil).getTime() > Date.now()
+                            ? "whitespace-nowrap rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
+                            : "whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800"
+                        }
+                        title="Criou a conta sozinho e paga o plano mensal"
+                      >
+                        {c.paidUntil && new Date(c.paidUntil).getTime() > Date.now()
+                          ? `Assinante · até ${formatDate(c.paidUntil)}`
+                          : "Assinante · não pago"}
+                      </span>
+                    )}
                     {!c.active && <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">Desativado</span>}
                     <ChevronRight className="size-4 shrink-0 text-zinc-300 group-hover:text-zinc-500" aria-hidden />
                   </Link>

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ChevronRight, QrCode, ScanLine } from "lucide-react";
+import { ChevronRight, Plus, QrCode, ScanLine } from "lucide-react";
 import { useAuth } from "../../auth";
 import { api } from "../../lib/api";
 import { shortUrl } from "../../lib/format";
@@ -15,11 +15,34 @@ export function MyPlatesPage() {
     <>
       <PageHeader
         title={name ? `Olá, ${name}` : "Minhas plaquinhas"}
-        description={data ? `${data.total} ${data.total === 1 ? "plaquinha" : "plaquinhas"} · ${data.configured} com link · ${data.total - data.configured} em branco` : undefined}
+        description={
+          data
+            ? data.canCreate
+              ? `${data.total} de ${data.maxPlates} QR Codes usados`
+              : `${data.total} ${data.total === 1 ? "plaquinha" : "plaquinhas"} · ${data.configured} com link · ${data.total - data.configured} em branco`
+            : undefined
+        }
       />
-      <Link to="/minhas/escanear" className={`${buttonClass("primary")} mb-6 h-14 w-full text-base`}>
-        <ScanLine className="size-5" aria-hidden /> Escanear plaquinha
-      </Link>
+      {data?.canCreate ? (
+        <div className="mb-6 grid gap-3 sm:grid-cols-2">
+          {data.total < (data.maxPlates ?? 0) ? (
+            <Link to="/minhas/nova" className={`${buttonClass("primary")} h-14 w-full text-base`}>
+              <Plus className="size-5" aria-hidden /> Novo QR Code
+            </Link>
+          ) : (
+            <p className="flex h-14 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-center text-sm text-zinc-600">
+              Você chegou ao limite de {data.maxPlates} QR Codes do plano.
+            </p>
+          )}
+          <Link to="/minhas/escanear" className={`${buttonClass("secondary")} h-14 w-full text-base`}>
+            <ScanLine className="size-5" aria-hidden /> Escanear plaquinha
+          </Link>
+        </div>
+      ) : (
+        <Link to="/minhas/escanear" className={`${buttonClass("primary")} mb-6 h-14 w-full text-base`}>
+          <ScanLine className="size-5" aria-hidden /> Escanear plaquinha
+        </Link>
+      )}
       <Card>
         {loading && !data ? (
           <Spinner />
@@ -30,8 +53,12 @@ export function MyPlatesPage() {
         ) : !data || data.items.length === 0 ? (
           <EmptyState
             icon={<QrCode className="size-5" />}
-            title="Nenhuma plaquinha na sua conta"
-            description="Quando as suas plaquinhas forem liberadas, elas aparecem aqui."
+            title={data?.canCreate ? "Você ainda não criou nenhum QR Code" : "Nenhuma plaquinha na sua conta"}
+            description={
+              data?.canCreate
+                ? "Toque em “Novo QR Code”, cole o link e baixe o arquivo para imprimir."
+                : "Quando as suas plaquinhas forem liberadas, elas aparecem aqui."
+            }
           />
         ) : (
           <ul className="divide-y divide-zinc-100" data-testid="my-plates">

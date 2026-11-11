@@ -39,6 +39,7 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
     if (res.status === 401 && path !== "/auth/login" && path !== "/auth/session") {
       window.dispatchEvent(new Event("auth:expired"));
     }
+    if (res.status === 402 && !path.startsWith("/billing")) window.dispatchEvent(new Event("billing:required"));
     const err = data?.error;
     throw new ApiError(res.status, err?.message ?? `Erro ${res.status}`, err?.code, err?.fields);
   }

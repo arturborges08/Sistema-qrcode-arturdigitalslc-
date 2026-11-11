@@ -20,12 +20,21 @@ import { AccountPage } from "./pages/Account";
 import { MyPlatesPage } from "./pages/client/MyPlates";
 import { MyPlateDetailPage } from "./pages/client/MyPlateDetail";
 import { api } from "./lib/api";
+import { LandingPage } from "./pages/Landing";
+import { SignupPage } from "./pages/Signup";
+import { PlanPage } from "./pages/Plan";
+import { PaymentReturnPage } from "./pages/PaymentReturn";
+import { MyPlateNewPage } from "./pages/client/MyPlateNew";
 
 function RequireAuth() {
   const { status } = useAuth();
   const location = useLocation();
   if (status === "loading") return <Spinner label="Verificando sessão…" />;
-  if (status === "anonymous") return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  if (status === "anonymous") {
+    // Quem chega na raiz do site sem conta vê a página inicial; nas outras páginas, vai para o login e depois volta.
+    if (location.pathname === "/") return <Navigate to="/inicio" replace />;
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  }
   return <Outlet />;
 }
 
@@ -36,8 +45,11 @@ function OwnerOnly() {
 }
 
 function ClientOnly() {
-  const { role } = useAuth();
-  return role === "CLIENT" ? <Outlet /> : <Navigate to="/" replace />;
+  const { role, billing } = useAuth();
+  if (role !== "CLIENT") return <Navigate to="/" replace />;
+  // Assinante sem plano em dia só acessa a página do plano.
+  if (billing?.required && !billing.active) return <Navigate to="/plano" replace />;
+  return <Outlet />;
 }
 
 type ScanTarget = { id: string; configured: boolean };
@@ -53,7 +65,9 @@ function ClientScanPage() {
 }
 
 const router = createBrowserRouter([
+  { path: "/inicio", element: <LandingPage /> },
   { path: "/login", element: <LoginPage /> },
+  { path: "/cadastro", element: <SignupPage /> },
   {
     element: <RequireAuth />,
     children: [
@@ -86,10 +100,13 @@ const router = createBrowserRouter([
             children: [
               { path: "/minhas", element: <MyPlatesPage /> },
               { path: "/minhas/escanear", element: <ClientScanPage /> },
+              { path: "/minhas/nova", element: <MyPlateNewPage /> },
               { path: "/minhas/:id", element: <MyPlateDetailPage /> },
             ],
           },
           { path: "/conta", element: <AccountPage /> },
+          { path: "/plano", element: <PlanPage /> },
+          { path: "/pagamento/retorno", element: <PaymentReturnPage /> },
           { path: "*", element: <NotFoundPage /> },
         ],
       },

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, ExternalLink, ScanLine } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Download, ExternalLink, ScanLine } from "lucide-react";
+import { CopyButton } from "../../components/CopyButton";
 import { api, ApiError } from "../../lib/api";
 import { checkUrl, formatDateTime } from "../../lib/format";
 import type { HistoryItem, MyPlate } from "../../lib/types";
@@ -52,6 +53,7 @@ export function MyPlateDetailPage() {
             Esta plaquinha está pausada pelo fornecedor: quem escanear vê um aviso de indisponível.
           </p>
         )}
+        <QrCard plate={plate} />
         <HistoryCard loading={history.loading} error={history.error} items={history.data?.items ?? []} />
         <Link to="/minhas/escanear" className={`${buttonClass("secondary")} w-full`}>
           <ScanLine className="size-4" aria-hidden /> Escanear outra plaquinha
@@ -168,6 +170,39 @@ function LinkCard({ plate, onSaved }: { plate: MyPlate; onSaved: (p: MyPlate) =>
             </a>
           </div>
         )}
+      </div>
+    </Card>
+  );
+}
+
+/** QR Code para baixar e imprimir. O endereço permanente nunca muda, mesmo quando o link é trocado. */
+function QrCard({ plate }: { plate: MyPlate }) {
+  const base = `/api/me/plates/${plate.id}`;
+  return (
+    <Card>
+      <CardHeader title="QR Code para imprimir" description="Este QR Code nunca muda. Pode imprimir sem medo: quando trocar o link, ele acompanha." />
+      <div className="flex flex-col items-center gap-5 p-5 sm:flex-row sm:items-start">
+        <img src={`${base}/qr.svg`} alt={`QR Code da plaquinha ${plate.code}`} className="qr-surface size-40 shrink-0 rounded-lg border border-zinc-200 bg-white p-1" />
+        <div className="w-full min-w-0 space-y-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Endereço permanente (use também na etiqueta NFC)</p>
+            <div className="mt-1 flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded-md bg-zinc-100 px-2 py-1.5 text-sm text-zinc-800">{plate.permanentUrl}</code>
+              <CopyButton value={plate.permanentUrl} />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <a href={`${base}/qr.png?size=print&download=1`} className={buttonClass("primary", "sm")}>
+              <Download className="size-4" aria-hidden /> PNG para gráfica
+            </a>
+            <a href={`${base}/qr.svg?download=1`} className={buttonClass("secondary", "sm")}>
+              <Download className="size-4" aria-hidden /> SVG (vetor)
+            </a>
+            <a href={`${base}/qr.png?size=screen&download=1`} className={buttonClass("secondary", "sm")}>
+              <Download className="size-4" aria-hidden /> PNG pequeno
+            </a>
+          </div>
+        </div>
       </div>
     </Card>
   );
